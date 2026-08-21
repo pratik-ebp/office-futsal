@@ -4,6 +4,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   setDoc,
@@ -14,17 +15,29 @@ import { ROSTER } from './data/roster'
 import './App.css'
 
 const ADMIN_SESSION_KEY = 'thursday-players:isAdmin'
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
+const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_PASSWORD_HASH
 const PLAYERS_COLLECTION = 'players'
+const CODES_COLLECTION = 'playerCodes'
 const RESPONSES_COLLECTION = 'responses'
 const PAID_COLLECTION = 'paid'
-const PAY_CONFIRM_WORD = 'done'
 
 function slugify(name) {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+// SHA-256 hex digest via the browser's built-in Web Crypto API — no library
+// needed. Keeps the admin password and player codes out of the JS bundle
+// and Firestore as plaintext (see firestore.rules for what this does and
+// doesn't protect against).
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(text)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 // Always the next upcoming Thursday (today if today is Thursday) — never a
@@ -54,7 +67,9 @@ function formatDate(date) {
 }
 
 // One-time (per empty database) seed from the roster file. Safe to call on
-// every load — it's a no-op once any player doc exists.
+// every load — it's a no-op once any player doc exists. Seeded players get
+// no code; run scripts/assign-codes.mjs afterward to assign them (writes to
+// the separate playerCodes collection, never to /players itself).
 async function ensureSeeded() {
   const snap = await getDocs(collection(db, PLAYERS_COLLECTION))
   if (!snap.empty) return
@@ -74,8 +89,8 @@ function App() {
   const [paid, setPaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
-  const [payingId, setPayingId] = useState(null)
-  const [payInput, setPayInput] = useState('')
+  const [newCode, setNewCode] = useState('')
+  const [addError, setAddError] = useState('')
 
   const [isAdmin, setIsAdmin] = useState(
     () => sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
@@ -83,6 +98,13 @@ function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
   const [loginError, setLoginError] = useState('')
+
+  // Code-gate for column moves (In/Out/Undo/Pay/Unpay): one player row at a
+  // time shows an inline 4-digit code prompt instead of performing the move.
+  const [verifyingId, setVerifyingId] = useState(null)
+  const [verifyAction, setVerifyAction] = useState(null)
+  const [codeInput, setCodeInput] = useState('')
+  const [codeError, setCodeError] = useState('')
 
   useEffect(() => {
     ensureSeeded()
@@ -113,15 +135,25 @@ function App() {
     e.preventDefault()
     if (!isAdmin) return
     const name = newName.trim()
+    const code = newCode.trim()
     if (!name) return
+    if (!/^\d{4}$/.test(code)) {
+      setAddError('Code must be exactly 4 digits.')
+      return
+    }
     const id = slugify(name) || crypto.randomUUID()
+    const codeHash = await sha256Hex(code)
     await setDoc(doc(db, PLAYERS_COLLECTION, id), { name })
+    await setDoc(doc(db, CODES_COLLECTION, id), { codeHash })
     setNewName('')
+    setNewCode('')
+    setAddError('')
   }
 
   async function removePlayer(id) {
     if (!isAdmin) return
     await deleteDoc(doc(db, PLAYERS_COLLECTION, id))
+    await deleteDoc(doc(db, CODES_COLLECTION, id))
     await setDoc(
       doc(db, RESPONSES_COLLECTION, responsesDocId),
       { [id]: deleteField() },
@@ -130,13 +162,14 @@ function App() {
     await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
-  function submitLogin(e) {
+  async function submitLogin(e) {
     e.preventDefault()
-    if (!ADMIN_PASSWORD) {
-      setLoginError('No admin password configured (set VITE_ADMIN_PASSWORD).')
+    if (!ADMIN_PASSWORD_HASH) {
+      setLoginError('No admin password configured (set VITE_ADMIN_PASSWORD_HASH).')
       return
     }
-    if (passwordInput === ADMIN_PASSWORD) {
+    const hash = await sha256Hex(passwordInput)
+    if (hash === ADMIN_PASSWORD_HASH) {
       sessionStorage.setItem(ADMIN_SESSION_KEY, 'true')
       setIsAdmin(true)
       setShowLogin(false)
@@ -170,22 +203,46 @@ function App() {
     setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
-  function startPaying(id) {
-    setPayingId(id)
-    setPayInput('')
+  const MOVE_ACTIONS = {
+    in: (id) => setResponse(id, 'yes'),
+    out: (id) => setResponse(id, 'no'),
+    undo: (id) => clearResponse(id),
+    pay: (id) => markPaid(id),
+    unpay: (id) => unpay(id),
   }
 
-  function cancelPaying() {
-    setPayingId(null)
-    setPayInput('')
+  function requestMove(player, action) {
+    setVerifyingId(player.id)
+    setVerifyAction(action)
+    setCodeInput('')
+    setCodeError('')
   }
 
-  function handlePayInput(id, value) {
-    setPayInput(value)
-    if (value.trim().toLowerCase() === PAY_CONFIRM_WORD) {
-      markPaid(id)
-      setPayingId(null)
-      setPayInput('')
+  function cancelVerify() {
+    setVerifyingId(null)
+    setVerifyAction(null)
+    setCodeInput('')
+    setCodeError('')
+  }
+
+  async function handleCodeInput(player, value) {
+    const digits = value.replace(/\D/g, '').slice(0, 4)
+    setCodeInput(digits)
+    setCodeError('')
+    if (digits.length !== 4) return
+    const codeSnap = await getDoc(doc(db, CODES_COLLECTION, player.id))
+    const storedHash = codeSnap.exists() ? codeSnap.data().codeHash : null
+    if (!storedHash) {
+      setCodeError('No code assigned — ask admin.')
+      return
+    }
+    const digitsHash = await sha256Hex(digits)
+    if (digitsHash === storedHash) {
+      MOVE_ACTIONS[verifyAction](player.id)
+      cancelVerify()
+    } else {
+      setCodeError('Wrong code.')
+      setCodeInput('')
     }
   }
 
@@ -195,50 +252,53 @@ function App() {
   const outPlayers = players.filter((p) => responses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => paid[p.id])
 
+  function renderVerifyForm(p) {
+    return (
+      <div className="verify-form">
+        <input
+          type="text"
+          inputMode="numeric"
+          className={`code-input ${codeError ? 'error' : ''}`}
+          placeholder="Code"
+          value={codeInput}
+          onChange={(e) => handleCodeInput(p, e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && cancelVerify()}
+          autoFocus
+        />
+        {codeError && <span className="code-error">{codeError}</span>}
+        <button type="button" className="link-btn" aria-label="Cancel" onClick={cancelVerify}>
+          ×
+        </button>
+      </div>
+    )
+  }
+
   function renderRow(p) {
     const status = responses[p.id]
-    const isPaying = payingId === p.id
+    const isVerifying = verifyingId === p.id
     return (
       <li key={p.id} className="player-row">
         <span className="player-name">{p.name}</span>
-        {isPaying ? (
-          <div className="pay-form">
-            <input
-              type="text"
-              className="pay-input"
-              placeholder={`Type "${PAY_CONFIRM_WORD}"`}
-              value={payInput}
-              onChange={(e) => handlePayInput(p.id, e.target.value)}
-              onKeyDown={(e) => e.key === 'Escape' && cancelPaying()}
-              autoFocus
-            />
-            <button
-              type="button"
-              className="link-btn"
-              aria-label="Cancel payment"
-              onClick={cancelPaying}
-            >
-              ×
-            </button>
-          </div>
+        {isVerifying ? (
+          renderVerifyForm(p)
         ) : (
           <div className="actions">
             <button
               type="button"
               className={`choice yes ${status === 'yes' ? 'active' : ''}`}
-              onClick={() => setResponse(p.id, 'yes')}
+              onClick={() => requestMove(p, 'in')}
             >
               In
             </button>
             <button
               type="button"
               className={`choice no ${status === 'no' ? 'active' : ''}`}
-              onClick={() => setResponse(p.id, 'no')}
+              onClick={() => requestMove(p, 'out')}
             >
               Out
             </button>
             {status === 'yes' && (
-              <button type="button" className="pay" onClick={() => startPaying(p.id)}>
+              <button type="button" className="pay" onClick={() => requestMove(p, 'pay')}>
                 Pay
               </button>
             )}
@@ -247,7 +307,7 @@ function App() {
                 type="button"
                 className="undo"
                 aria-label={`Move ${p.name} back to pending`}
-                onClick={() => clearResponse(p.id)}
+                onClick={() => requestMove(p, 'undo')}
               >
                 ↺
               </button>
@@ -269,29 +329,34 @@ function App() {
   }
 
   function renderPaidRow(p) {
+    const isVerifying = verifyingId === p.id
     return (
       <li key={p.id} className="player-row">
         <span className="player-name">{p.name}</span>
-        <div className="actions">
-          <button
-            type="button"
-            className="undo"
-            aria-label={`Move ${p.name} back to In (unpaid)`}
-            onClick={() => unpay(p.id)}
-          >
-            ↺
-          </button>
-          {isAdmin && (
+        {isVerifying ? (
+          renderVerifyForm(p)
+        ) : (
+          <div className="actions">
             <button
               type="button"
-              className="remove"
-              aria-label={`Remove ${p.name}`}
-              onClick={() => removePlayer(p.id)}
+              className="undo"
+              aria-label={`Move ${p.name} back to In (unpaid)`}
+              onClick={() => requestMove(p, 'unpay')}
             >
-              ×
+              ↺
             </button>
-          )}
-        </div>
+            {isAdmin && (
+              <button
+                type="button"
+                className="remove"
+                aria-label={`Remove ${p.name}`}
+                onClick={() => removePlayer(p.id)}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
       </li>
     )
   }
@@ -349,7 +414,16 @@ function App() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="4-digit code"
+            className="add-code-input"
+            value={newCode}
+            onChange={(e) => setNewCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          />
           <button type="submit">Add</button>
+          {addError && <span className="login-error">{addError}</span>}
         </form>
       )}
 

@@ -102,6 +102,10 @@
   cursor: pointer;
 }
 
+.add-code-input {
+  flex: 0 0 120px;
+}
+
 .empty {
   text-align: center;
   color: var(--text);
@@ -215,24 +219,36 @@
   background: rgba(217, 119, 6, 0.1);
 }
 
-.pay-form {
+.verify-form {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: 1;
   min-width: 160px;
+  flex-wrap: wrap;
 }
 
-.pay-input {
+.code-input {
   flex: 1;
   min-width: 0;
+  max-width: 90px;
   padding: 6px 8px;
-  border: 1px solid #d97706;
+  border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text-h);
   font: inherit;
   font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.code-input.error {
+  border-color: #dc2626;
+}
+
+.code-error {
+  font-size: 12px;
+  color: #dc2626;
 }
 
 .choice {

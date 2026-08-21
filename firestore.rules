@@ -17,5 +17,19 @@ service cloud.firestore {
     match /paid/{cycleId} {
       allow read, write: if true;
     }
+    // Player codes live separately from /players so they're never part of
+    // the normal roster payload every visitor downloads on page load. `get`
+    // (fetch one known doc id) is allowed so the app can check a single
+    // code when someone verifies a move; `list` (dump/query the whole
+    // collection) is denied so codes can't be bulk-scraped in one call.
+    // Doc IDs are player-name slugs, which are public, so a determined
+    // person could still guess-and-fetch codes one at a time from devtools
+    // — real enforcement needs server-side code, which this app doesn't
+    // have. See firestore.rules header above.
+    match /playerCodes/{playerId} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if true;
+    }
   }
 }
