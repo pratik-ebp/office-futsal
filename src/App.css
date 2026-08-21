@@ -209,6 +209,20 @@
   color: #fff;
 }
 
+.undo {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.undo:hover {
+  color: var(--accent);
+}
+
 .remove {
   border: none;
   background: transparent;

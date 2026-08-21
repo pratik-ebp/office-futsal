@@ -145,6 +145,10 @@ function App() {
     setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: value }, { merge: true })
   }
 
+  function clearResponse(id) {
+    setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  }
+
   const pendingPlayers = players.filter((p) => !responses[p.id])
   const inPlayers = players.filter((p) => responses[p.id] === 'yes')
   const outPlayers = players.filter((p) => responses[p.id] === 'no')
@@ -169,6 +173,16 @@ function App() {
           >
             Out
           </button>
+          {status && (
+            <button
+              type="button"
+              className="undo"
+              aria-label={`Move ${p.name} back to pending`}
+              onClick={() => clearResponse(p.id)}
+            >
+              ↺
+            </button>
+          )}
           {isAdmin && (
             <button
               type="button"
