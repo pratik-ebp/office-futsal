@@ -25,18 +25,16 @@ function slugify(name) {
     .replace(/^-+|-+$/g, '')
 }
 
-// Poll cycle resets every Tuesday midnight: from Tue through the following
-// Monday, the target is that window's Thursday. So the board goes blank
-// Tuesday morning for the upcoming Thursday (countable from Wednesday on),
-// and stays frozen on last Thursday's tally Fri-Mon until the next reset.
+// Always the next upcoming Thursday (today if today is Thursday) — never a
+// date that's already passed. Since this is a fresh Firestore doc key, the
+// board goes blank the moment the previous Thursday passes, well ahead of
+// the following week's game.
 function getCycleThursday() {
   const now = new Date()
-  const day = now.getDay() // 0 = Sun ... 2 = Tue ... 4 = Thu
-  const daysSinceTuesday = (day - 2 + 7) % 7
-  const tuesday = new Date(now)
-  tuesday.setDate(now.getDate() - daysSinceTuesday)
-  const thursday = new Date(tuesday)
-  thursday.setDate(tuesday.getDate() + 2)
+  const day = now.getDay() // 0 = Sun ... 4 = Thu
+  const diff = (4 - day + 7) % 7
+  const thursday = new Date(now)
+  thursday.setDate(now.getDate() + diff)
   thursday.setHours(0, 0, 0, 0)
   return thursday
 }
