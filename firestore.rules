@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Open read/write for everyone with the site URL. This app has no
+    // server-side auth — the "Admin login" button is a client-side UI
+    // gate only (see .env.example), not enforced here. Anyone who opens
+    // devtools can write to Firestore directly regardless of these
+    // rules being this permissive. Acceptable for a casual internal
+    // office poll; do not reuse this file for anything holding
+    // sensitive data.
+    match /players/{playerId} {
+      allow read, write: if true;
+    }
+    match /responses/{cycleId} {
+      allow read, write: if true;
+    }
+  }
+}
