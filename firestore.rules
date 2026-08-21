@@ -14,5 +14,8 @@ service cloud.firestore {
     match /responses/{cycleId} {
       allow read, write: if true;
     }
+    match /paid/{cycleId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -17,6 +17,8 @@ const ADMIN_SESSION_KEY = 'thursday-players:isAdmin'
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
 const PLAYERS_COLLECTION = 'players'
 const RESPONSES_COLLECTION = 'responses'
+const PAID_COLLECTION = 'paid'
+const PAY_CONFIRM_WORD = 'done'
 
 function slugify(name) {
   return name
@@ -69,8 +71,11 @@ function App() {
 
   const [players, setPlayers] = useState([])
   const [responses, setResponses] = useState({})
+  const [paid, setPaid] = useState({})
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
+  const [payingId, setPayingId] = useState(null)
+  const [payInput, setPayInput] = useState('')
 
   const [isAdmin, setIsAdmin] = useState(
     () => sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
@@ -97,6 +102,13 @@ function App() {
     return unsubscribe
   }, [responsesDocId])
 
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, PAID_COLLECTION, responsesDocId), (snap) => {
+      setPaid(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
   async function addPlayer(e) {
     e.preventDefault()
     if (!isAdmin) return
@@ -115,6 +127,7 @@ function App() {
       { [id]: deleteField() },
       { merge: true },
     )
+    await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
   function submitLogin(e) {
@@ -141,46 +154,133 @@ function App() {
 
   function setResponse(id, value) {
     setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: value }, { merge: true })
+    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
   function clearResponse(id) {
     setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  }
+
+  function markPaid(id) {
+    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: true }, { merge: true })
+  }
+
+  function unpay(id) {
+    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  }
+
+  function startPaying(id) {
+    setPayingId(id)
+    setPayInput('')
+  }
+
+  function cancelPaying() {
+    setPayingId(null)
+    setPayInput('')
+  }
+
+  function handlePayInput(id, value) {
+    setPayInput(value)
+    if (value.trim().toLowerCase() === PAY_CONFIRM_WORD) {
+      markPaid(id)
+      setPayingId(null)
+      setPayInput('')
+    }
   }
 
   const pendingPlayers = players.filter((p) => !responses[p.id])
-  const inPlayers = players.filter((p) => responses[p.id] === 'yes')
+  const confirmedPlayers = players.filter((p) => responses[p.id] === 'yes')
+  const inPlayers = confirmedPlayers.filter((p) => !paid[p.id])
   const outPlayers = players.filter((p) => responses[p.id] === 'no')
+  const paidPlayers = confirmedPlayers.filter((p) => paid[p.id])
 
   function renderRow(p) {
     const status = responses[p.id]
+    const isPaying = payingId === p.id
+    return (
+      <li key={p.id} className="player-row">
+        <span className="player-name">{p.name}</span>
+        {isPaying ? (
+          <div className="pay-form">
+            <input
+              type="text"
+              className="pay-input"
+              placeholder={`Type "${PAY_CONFIRM_WORD}"`}
+              value={payInput}
+              onChange={(e) => handlePayInput(p.id, e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && cancelPaying()}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="link-btn"
+              aria-label="Cancel payment"
+              onClick={cancelPaying}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <div className="actions">
+            <button
+              type="button"
+              className={`choice yes ${status === 'yes' ? 'active' : ''}`}
+              onClick={() => setResponse(p.id, 'yes')}
+            >
+              In
+            </button>
+            <button
+              type="button"
+              className={`choice no ${status === 'no' ? 'active' : ''}`}
+              onClick={() => setResponse(p.id, 'no')}
+            >
+              Out
+            </button>
+            {status === 'yes' && (
+              <button type="button" className="pay" onClick={() => startPaying(p.id)}>
+                Pay
+              </button>
+            )}
+            {status && (
+              <button
+                type="button"
+                className="undo"
+                aria-label={`Move ${p.name} back to pending`}
+                onClick={() => clearResponse(p.id)}
+              >
+                ↺
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                className="remove"
+                aria-label={`Remove ${p.name}`}
+                onClick={() => removePlayer(p.id)}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+      </li>
+    )
+  }
+
+  function renderPaidRow(p) {
     return (
       <li key={p.id} className="player-row">
         <span className="player-name">{p.name}</span>
         <div className="actions">
           <button
             type="button"
-            className={`choice yes ${status === 'yes' ? 'active' : ''}`}
-            onClick={() => setResponse(p.id, 'yes')}
+            className="undo"
+            aria-label={`Move ${p.name} back to In (unpaid)`}
+            onClick={() => unpay(p.id)}
           >
-            In
+            ↺
           </button>
-          <button
-            type="button"
-            className={`choice no ${status === 'no' ? 'active' : ''}`}
-            onClick={() => setResponse(p.id, 'no')}
-          >
-            Out
-          </button>
-          {status && (
-            <button
-              type="button"
-              className="undo"
-              aria-label={`Move ${p.name} back to pending`}
-              onClick={() => clearResponse(p.id)}
-            >
-              ↺
-            </button>
-          )}
           {isAdmin && (
             <button
               type="button"
@@ -294,6 +394,19 @@ function App() {
                 <li className="column-empty">No one yet.</li>
               ) : (
                 outPlayers.map(renderRow)
+              )}
+            </ul>
+          </section>
+
+          <section className="column">
+            <h2 className="column-title paid">
+              Paid <span className="count">{paidPlayers.length}</span>
+            </h2>
+            <ul className="player-list">
+              {paidPlayers.length === 0 ? (
+                <li className="column-empty">No one yet.</li>
+              ) : (
+                paidPlayers.map(renderPaidRow)
               )}
             </ul>
           </section>

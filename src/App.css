@@ -1,5 +1,5 @@
 .page {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 48px 20px;
   text-align: left;
@@ -109,12 +109,18 @@
 
 .board {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   align-items: start;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
+  .board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
   .board {
     grid-template-columns: 1fr;
   }
@@ -151,6 +157,11 @@
   border-bottom-color: #dc2626;
 }
 
+.column-title.paid {
+  color: #d97706;
+  border-bottom-color: #d97706;
+}
+
 .column-empty {
   color: var(--text);
   font-size: 14px;
@@ -170,9 +181,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  flex-wrap: wrap;
 }
 
 .player-name {
@@ -184,6 +197,42 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.pay {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d97706;
+  background: transparent;
+  color: #d97706;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pay:hover {
+  background: rgba(217, 119, 6, 0.1);
+}
+
+.pay-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.pay-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
 }
 
 .choice {
