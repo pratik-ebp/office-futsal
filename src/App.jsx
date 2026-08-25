@@ -122,6 +122,7 @@ function App() {
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
   const [addError, setAddError] = useState('')
+  const [search, setSearch] = useState('')
 
   const costImageRef = useRef(null)
   const [costTotalInput, setCostTotalInput] = useState('')
@@ -354,10 +355,13 @@ function App() {
     }
   }
 
-  const pendingPlayers = players.filter((p) => !responses[p.id])
-  const confirmedPlayers = players.filter((p) => responses[p.id] === 'yes')
+  const visiblePlayers = players.filter((p) =>
+    p.name.toLowerCase().includes(search.trim().toLowerCase()),
+  )
+  const pendingPlayers = visiblePlayers.filter((p) => !responses[p.id])
+  const confirmedPlayers = visiblePlayers.filter((p) => responses[p.id] === 'yes')
   const inPlayers = confirmedPlayers.filter((p) => !paid[p.id])
-  const outPlayers = players.filter((p) => responses[p.id] === 'no')
+  const outPlayers = visiblePlayers.filter((p) => responses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => paid[p.id])
 
   function renderVerifyForm(p) {
@@ -599,10 +603,22 @@ function App() {
         </form>
       )}
 
+      {players.length > 0 && (
+        <input
+          type="search"
+          className="search-input"
+          placeholder="Search players…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      )}
+
       {loading ? (
         <p className="empty">Loading players…</p>
       ) : players.length === 0 ? (
         <p className="empty">No players yet. Add one above.</p>
+      ) : visiblePlayers.length === 0 ? (
+        <p className="empty">No players match "{search}".</p>
       ) : (
         <div className="board">
           <section className="column">

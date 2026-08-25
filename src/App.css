@@ -227,6 +227,19 @@
   flex: 0 0 120px;
 }
 
+.search-input {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
 .empty {
   text-align: center;
   color: var(--text);
