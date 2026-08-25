@@ -467,37 +467,6 @@ function App() {
 
   return (
     <div className="page">
-      {cost && (
-        <section className="cost-banner">
-          <img
-            src={cost.imageDataUrl}
-            alt="Cost receipt"
-            className="cost-thumb"
-            onClick={() => setImageExpanded(true)}
-          />
-          <div className="cost-details">
-            <div className="cost-row">
-              <span>Total cost</span>
-              <strong>{formatMoney(cost.totalCost)}</strong>
-            </div>
-            <div className="cost-row">
-              <span>Players</span>
-              <strong>{cost.playerCount}</strong>
-            </div>
-            <div className="cost-share">
-              <span>Each's share</span>
-              <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {imageExpanded && cost && (
-        <div className="lightbox" onClick={() => setImageExpanded(false)}>
-          <img src={cost.imageDataUrl} alt="Cost receipt, full size" />
-        </div>
-      )}
-
       <div className="admin-bar">
         {isAdmin ? (
           <>
@@ -543,6 +512,38 @@ function App() {
         <h1>Thursday Players</h1>
         <p className="subtitle">Who's in for {formatDate(thursday)}?</p>
       </header>
+
+      {cost && (
+        <section className="cost-banner">
+          <h2 className="cost-banner-title">This week's payment to:</h2>
+          <img
+            src={cost.imageDataUrl}
+            alt="Cost receipt"
+            className="cost-thumb"
+            onClick={() => setImageExpanded(true)}
+          />
+          <div className="cost-details">
+            <div className="cost-row">
+              <span>Total cost</span>
+              <strong>{formatMoney(cost.totalCost)}</strong>
+            </div>
+            <div className="cost-row">
+              <span>Players</span>
+              <strong>{cost.playerCount}</strong>
+            </div>
+            <div className="cost-share">
+              <span>Each's share</span>
+              <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {imageExpanded && cost && (
+        <div className="lightbox" onClick={() => setImageExpanded(false)}>
+          <img src={cost.imageDataUrl} alt="Cost receipt, full size" />
+        </div>
+      )}
 
       {isAdmin && (
         <form className="cost-form" onSubmit={saveCost}>

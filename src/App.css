@@ -88,6 +88,13 @@
   width: fit-content;
 }
 
+.cost-banner-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 .cost-thumb {
   width: auto;
   height: auto;
