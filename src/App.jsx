@@ -185,6 +185,23 @@ function App() {
   // show something instead of looking hung.
   const [checkingId, setCheckingId] = useState(null)
 
+  // Ball-arc move animation: rowRefs tracks every currently-mounted row DOM
+  // node by player id (across all four columns) so we can grab its rect
+  // right before a move and again right after it lands in a new column.
+  // flightsRef holds "captured but not yet animated" start rects between
+  // the click and the next responses/paid update — a plain ref (not state)
+  // since it's imperative bookkeeping, not something that should re-render.
+  const rowRefs = useRef(new Map())
+  const flightsRef = useRef(new Map())
+  const ballLayerRef = useRef(null)
+
+  function setRowRef(id) {
+    return (el) => {
+      if (el) rowRefs.current.set(id, el)
+      else rowRefs.current.delete(id)
+    }
+  }
+
   useEffect(() => {
     ensureSeeded()
     const unsubscribe = onSnapshot(collection(db, PLAYERS_COLLECTION), (snap) => {
@@ -223,6 +240,66 @@ function App() {
     })
     return unsubscribe
   }, [responsesDocId])
+
+  // Fires after responses/paid change and the board has re-rendered rows
+  // into their new columns. For every move captured by runMove(), the old
+  // rect was grabbed at click time; now grab the landed rect and play the
+  // arc between them.
+  useEffect(() => {
+    if (flightsRef.current.size === 0) return
+    const pending = Array.from(flightsRef.current.entries())
+    flightsRef.current.clear()
+    for (const [id, fromRect] of pending) {
+      const el = rowRefs.current.get(id)
+      if (!el) continue
+      animateBall(fromRect, el)
+    }
+  }, [responses, paid])
+
+  function animateBall(fromRect, toEl) {
+    const layer = ballLayerRef.current
+    if (!layer) return
+    const toRect = toEl.getBoundingClientRect()
+    const startX = fromRect.left + fromRect.width / 2
+    const startY = fromRect.top + fromRect.height / 2
+    const endX = toRect.left + toRect.width / 2
+    const endY = toRect.top + toRect.height / 2
+    const dist = Math.hypot(endX - startX, endY - startY)
+    if (dist < 4) return // same spot — nothing to animate
+
+    const arcHeight = Math.min(140, Math.max(50, dist * 0.3))
+    const midX = (startX + endX) / 2
+    const midY = (startY + endY) / 2 - arcHeight
+    const duration = Math.min(900, Math.max(420, dist * 1.1))
+    const spins = Math.max(1, Math.round(dist / 140)) * 360
+
+    const ball = document.createElement('div')
+    ball.className = 'flying-ball'
+    ball.textContent = '⚽'
+    layer.appendChild(ball)
+
+    const steps = 24
+    const keyframes = []
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const x = (1 - t) ** 2 * startX + 2 * (1 - t) * t * midX + t ** 2 * endX
+      const y = (1 - t) ** 2 * startY + 2 * (1 - t) * t * midY + t ** 2 * endY
+      const scale = 1 + Math.sin(Math.PI * t) * 0.15
+      keyframes.push({
+        transform: `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${spins * t}deg) scale(${scale})`,
+        offset: t,
+      })
+    }
+
+    const anim = ball.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' })
+    const finish = () => {
+      ball.remove()
+      toEl.classList.add('ball-landed')
+      setTimeout(() => toEl.classList.remove('ball-landed'), 500)
+    }
+    anim.onfinish = finish
+    anim.oncancel = finish
+  }
 
   // Prefill the admin edit fields once, when this week's cost doc first
   // loads — but only if the admin hasn't started typing into them yet.
@@ -370,6 +447,15 @@ function App() {
     unpay: (id) => unpay(id),
   }
 
+  // Grabs the row's current position before the move actually runs, so the
+  // ball-arc effect (above) has a "from" rect to animate away from once the
+  // row lands in its new column.
+  function runMove(id, action) {
+    const el = rowRefs.current.get(id)
+    if (el) flightsRef.current.set(id, el.getBoundingClientRect())
+    MOVE_ACTIONS[action](id)
+  }
+
   async function tryRememberedMove(player, action) {
     const raw = safeStorageGet(rememberedCodeKey(player.id))
     if (!raw) return false
@@ -387,7 +473,7 @@ function App() {
     const codeSnap = await getDoc(doc(db, CODES_COLLECTION, player.id))
     const storedHash = codeSnap.exists() ? codeSnap.data().codeHash : null
     if (storedHash && storedHash === saved.hash) {
-      MOVE_ACTIONS[action](player.id)
+      runMove(player.id, action)
       return true
     }
     safeStorageRemove(rememberedCodeKey(player.id))
@@ -396,7 +482,7 @@ function App() {
 
   async function requestMove(player, action) {
     if (isAdmin) {
-      MOVE_ACTIONS[action](player.id)
+      runMove(player.id, action)
       return
     }
     setCheckingId(player.id)
@@ -437,7 +523,7 @@ function App() {
         rememberedCodeKey(player.id),
         JSON.stringify({ hash: storedHash, date: isoDate(new Date()) }),
       )
-      MOVE_ACTIONS[verifyAction](player.id)
+      runMove(player.id, verifyAction)
       cancelVerify()
     } else {
       setCodeError('Wrong code.')
@@ -480,7 +566,7 @@ function App() {
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
     return (
-      <li key={p.id} className="player-row">
+      <li key={p.id} ref={setRowRef(p.id)} className="player-row">
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
@@ -537,7 +623,7 @@ function App() {
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
     return (
-      <li key={p.id} className="player-row">
+      <li key={p.id} ref={setRowRef(p.id)} className="player-row">
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
@@ -571,6 +657,7 @@ function App() {
 
   return (
     <div className="page">
+      <div className="ball-layer" ref={ballLayerRef} />
       <div className="admin-bar">
         {isAdmin ? (
           <>

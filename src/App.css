@@ -399,6 +399,36 @@
   gap: 8px;
 }
 
+.ball-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+}
+
+.flying-ball {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 22px;
+  line-height: 1;
+  will-change: transform;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+}
+
+.player-row.ball-landed {
+  animation: ball-landed-pulse 0.5s ease-out;
+}
+
+@keyframes ball-landed-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-border);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(198, 255, 61, 0);
+  }
+}
+
 .player-row {
   display: flex;
   align-items: center;
