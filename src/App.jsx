@@ -267,6 +267,24 @@ function App() {
 
     toEl.classList.add('card-incoming')
 
+    // A goalpost frames the landing spot for the whole flight — appears as
+    // the shot is taken, gone the moment the card lands — so the move reads
+    // as scoring a goal rather than just an arc between two points.
+    const goalWidth = Math.max(110, Math.min(170, toRect.width * 0.55))
+    const goalHeight = goalWidth * 0.68
+    const goal = document.createElement('div')
+    goal.className = 'goal-post'
+    goal.style.width = `${goalWidth}px`
+    goal.style.height = `${goalHeight}px`
+    goal.style.left = `${toRect.left + toRect.width / 2 - goalWidth / 2}px`
+    goal.style.top = `${toRect.top + toRect.height / 2 - goalHeight}px`
+    layer.appendChild(goal)
+    goal.animate([{ opacity: 0, transform: 'scaleY(0.85)' }, { opacity: 1, transform: 'scaleY(1)' }], {
+      duration: 220,
+      easing: 'ease-out',
+      fill: 'forwards',
+    })
+
     const clone = flight.node
     clone.classList.add('flying-card')
     clone.style.width = `${fromRect.width}px`
@@ -274,15 +292,16 @@ function App() {
     layer.appendChild(clone)
 
     // Move the clone's real content (name + buttons) into its own wrapper so
-    // it can fade out independently while a ball glyph fades in over it —
-    // the card "becomes" the ball at the peak of the arc, then reverses.
+    // it can fade out independently while a football fades in over it — the
+    // card "becomes" the ball for most of the flight, and reverses right at
+    // the end.
     const contentWrap = document.createElement('div')
     contentWrap.className = 'flying-card-content'
     while (clone.firstChild) contentWrap.appendChild(clone.firstChild)
     clone.appendChild(contentWrap)
     const ballFace = document.createElement('div')
     ballFace.className = 'flying-ball-face'
-    ballFace.textContent = '⚽'
+    ballFace.innerHTML = '<span class="flying-ball-face-icon">⚽</span>'
     clone.appendChild(ballFace)
 
     const arcHeight = Math.min(170, Math.max(60, dist * 0.32))
@@ -336,6 +355,9 @@ function App() {
     const anim = ballFace.animate(faceFrames, { duration, easing: 'linear', fill: 'forwards' })
     const finish = () => {
       clone.remove()
+      const goalFade = goal.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' })
+      goalFade.onfinish = () => goal.remove()
+      goalFade.oncancel = () => goal.remove()
       // The destination column can be far from wherever the player had
       // scrolled to (e.g. scrolled to the bottom of a long Pending list,
       // moving to In near the top) — bring the landed card into view before
