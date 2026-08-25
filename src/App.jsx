@@ -638,7 +638,7 @@ function App() {
 
       {cost && (
         <section className="cost-banner">
-          <h2 className="cost-banner-title">This week's payment to:</h2>
+          <h2 className="cost-banner-title">Last week's payment to:</h2>
           <img
             src={cost.imageDataUrl}
             alt="Cost receipt"
