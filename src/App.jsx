@@ -316,6 +316,10 @@ function App() {
   }
 
   function requestMove(player, action) {
+    if (isAdmin) {
+      MOVE_ACTIONS[action](player.id)
+      return
+    }
     setVerifyingId(player.id)
     setVerifyAction(action)
     setCodeInput('')
