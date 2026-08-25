@@ -273,12 +273,17 @@ function App() {
     // as scoring a goal rather than just an arc between two points.
     const goalWidth = Math.max(110, Math.min(170, toRect.width * 0.55))
     const goalHeight = goalWidth * 0.34
+    const goalLeft = toRect.left + toRect.width / 2 - goalWidth / 2
+    const goalTop = toRect.top + toRect.height / 2 - goalHeight
     const goal = document.createElement('div')
     goal.className = 'goal-post'
     goal.style.width = `${goalWidth}px`
     goal.style.height = `${goalHeight}px`
-    goal.style.left = `${toRect.left + toRect.width / 2 - goalWidth / 2}px`
-    goal.style.top = `${toRect.top + toRect.height / 2 - goalHeight}px`
+    goal.style.left = `${goalLeft}px`
+    goal.style.top = `${goalTop}px`
+    const net = document.createElement('div')
+    net.className = 'goal-net'
+    goal.appendChild(net)
     layer.appendChild(goal)
     goal.animate([{ opacity: 0, transform: 'scaleY(0.85)' }, { opacity: 1, transform: 'scaleY(1)' }], {
       duration: 220,
@@ -305,26 +310,26 @@ function App() {
     ballFace.innerHTML = '<span class="flying-ball-face-icon">⚽</span>'
     clone.appendChild(ballFace)
 
+    // The ball flies INTO the net, not to the row itself — the row only
+    // pops in once the net has taken the impact.
+    const netCenterX = goalLeft + goalWidth / 2
+    const netCenterY = goalTop + goalHeight / 2
+    const endX = netCenterX - fromRect.width / 2
+    const endY = netCenterY - fromRect.height / 2
     const arcHeight = Math.min(170, Math.max(60, dist * 0.32))
-    const midX = (fromRect.left + toRect.left) / 2
-    const midY = (fromRect.top + toRect.top) / 2 - arcHeight
+    const midX = (fromRect.left + endX) / 2
+    const midY = (fromRect.top + endY) / 2 - arcHeight
     const duration = Math.min(1150, Math.max(600, dist * 1.2))
     const spins = Math.max(2, Math.round(dist / 110))
     const ballSize = 42
     const sxTarget = ballSize / fromRect.width
     const syTarget = ballSize / fromRect.height
-    // Ball-shape "envelope": rises fast to fully-a-ball early, holds there
-    // for most of the flight, and only eases back to a full card right at
-    // the end — a plateau rather than a brief peak, so it spends most of
-    // the arc actually looking and rolling like a football.
+    // Ball-shape envelope: rises fast to fully-a-ball early and then stays a
+    // ball for the rest of the flight — it doesn't un-morph back into a card
+    // mid-air. The row reforms as a card separately, after impact.
     const riseEnd = 0.16
-    const fallStart = 0.86
     const smoothstep = (x) => x * x * (3 - 2 * x)
-    function shrinkAt(t) {
-      if (t < riseEnd) return smoothstep(t / riseEnd)
-      if (t > fallStart) return smoothstep((1 - t) / (1 - fallStart))
-      return 1
-    }
+    const shrinkAt = (t) => (t < riseEnd ? smoothstep(t / riseEnd) : 1)
 
     const steps = 30
     const keyframes = []
@@ -332,8 +337,8 @@ function App() {
     const faceFrames = []
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
-      const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * toRect.left
-      const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * toRect.top
+      const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * endX
+      const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * endY
       const shrink = shrinkAt(t)
       const rotate = spins * 360 * t
       const sx = 1 + (sxTarget - 1) * shrink
@@ -349,13 +354,13 @@ function App() {
     }
 
     // Outer timing is linear — the keyframes above already carry their own
-    // easing (the plateau curve, the bezier arc), so a second eased timing
+    // easing (the rise curve, the bezier arc), so a second eased timing
     // function on top would just distort it.
     clone.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' })
     contentWrap.animate(contentFrames, { duration, easing: 'linear', fill: 'forwards' })
     const anim = ballFace.animate(faceFrames, { duration, easing: 'linear', fill: 'forwards' })
-    const finish = () => {
-      clone.remove()
+
+    const revealDestination = () => {
       const goalFade = goal.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' })
       goalFade.onfinish = () => goal.remove()
       goalFade.oncancel = () => goal.remove()
@@ -368,8 +373,27 @@ function App() {
       toEl.classList.add('card-landed')
       setTimeout(() => toEl.classList.remove('card-landed'), 500)
     }
-    anim.onfinish = finish
-    anim.oncancel = finish
+
+    // Impact: the ball vanishes into the net and the net bulges as if it
+    // just caught a shot. The move only completes (row reveal) once that
+    // bulge has played, not the instant the ball arrives.
+    const impact = () => {
+      clone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-out', fill: 'forwards' }).onfinish = () =>
+        clone.remove()
+      const bulge = net.animate(
+        [
+          { transform: 'scale(1, 1)', offset: 0 },
+          { transform: 'scale(1.3, 0.8) translateY(6px)', offset: 0.35 },
+          { transform: 'scale(0.94, 1.08) translateY(-2px)', offset: 0.65 },
+          { transform: 'scale(1, 1)', offset: 1 },
+        ],
+        { duration: 340, easing: 'ease-out' },
+      )
+      bulge.onfinish = revealDestination
+      bulge.oncancel = revealDestination
+    }
+    anim.onfinish = impact
+    anim.oncancel = impact
   }
 
   // Prefill the admin edit fields once, when this week's cost doc first
