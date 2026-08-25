@@ -33,9 +33,27 @@
 
 body {
   margin: 0;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(12, 12, 13, 0.82), rgba(12, 12, 13, 0.9)),
+    url('./assets/futsal-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  filter: blur(16px);
+  transform: scale(1.1);
+  z-index: 0;
+  pointer-events: none;
 }
 
 #root {
+  position: relative;
+  z-index: 1;
   min-height: 100svh;
 }
 
