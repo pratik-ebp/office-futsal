@@ -59,7 +59,8 @@
   border: none;
   border-radius: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
+  font-weight: 600;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -161,6 +162,7 @@
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
+  background: var(--code-bg);
 }
 
 .cost-form-title {
@@ -191,7 +193,8 @@
   border: none;
   border-radius: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
+  font-weight: 600;
   font: inherit;
   cursor: pointer;
 }
@@ -218,7 +221,8 @@
   border: none;
   border-radius: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
+  font-weight: 600;
   font: inherit;
   cursor: pointer;
 }
@@ -323,6 +327,7 @@
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--code-bg);
   flex-wrap: wrap;
 }
 
