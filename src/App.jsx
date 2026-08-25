@@ -203,6 +203,13 @@ function App() {
     setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
+  async function resetAll() {
+    if (!isAdmin) return
+    if (!confirm('Move every player back to Pending? This clears In/Out/Paid for this week.')) return
+    await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
+    await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
+  }
+
   const MOVE_ACTIONS = {
     in: (id) => setResponse(id, 'yes'),
     out: (id) => setResponse(id, 'no'),
@@ -367,6 +374,9 @@ function App() {
         {isAdmin ? (
           <>
             <span className="admin-badge">Admin mode</span>
+            <button type="button" className="link-btn reset-all" onClick={resetAll}>
+              Reset all to Pending
+            </button>
             <button type="button" className="link-btn" onClick={logout}>
               Log out
             </button>
