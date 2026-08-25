@@ -83,12 +83,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 20px;
-  border: 2px solid var(--accent);
-  border-radius: 12px;
-  background: var(--accent-bg);
+  gap: 12px;
+  margin: 0 auto 28px;
+  width: fit-content;
 }
 
 .cost-thumb {
