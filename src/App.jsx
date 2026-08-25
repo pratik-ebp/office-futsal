@@ -49,6 +49,12 @@ const CODES_COLLECTION = 'playerCodes'
 const RESPONSES_COLLECTION = 'responses'
 const PAID_COLLECTION = 'paid'
 const COSTS_COLLECTION = 'costs'
+const STATUS_COLLECTION = 'matchStatus'
+const STATUS_LABELS = {
+  counting: 'Counting players',
+  booked: 'Booked',
+  cancelled: 'Cancelled',
+}
 // Firestore docs cap out at 1 MiB; leave headroom for the other fields on
 // the doc and base64's ~33% size overhead over the raw image bytes.
 const MAX_IMAGE_DATA_URL_LENGTH = 700_000
@@ -146,6 +152,7 @@ function App() {
   const [responses, setResponses] = useState({})
   const [paid, setPaid] = useState({})
   const [cost, setCost] = useState(null)
+  const [matchStatus, setMatchStatus] = useState('counting')
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
@@ -206,6 +213,13 @@ function App() {
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, COSTS_COLLECTION, responsesDocId), (snap) => {
       setCost(snap.exists() ? snap.data() : null)
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, STATUS_COLLECTION, responsesDocId), (snap) => {
+      setMatchStatus(snap.exists() ? snap.data().status : 'counting')
     })
     return unsubscribe
   }, [responsesDocId])
@@ -298,6 +312,11 @@ function App() {
     if (!confirm('Move every player back to Pending? This clears In/Out/Paid for this week.')) return
     await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
+  }
+
+  async function setStatus(status) {
+    if (!isAdmin) return
+    await setDoc(doc(db, STATUS_COLLECTION, responsesDocId), { status })
   }
 
   async function saveCost(e) {
@@ -597,6 +616,25 @@ function App() {
         <h1>Thursday Players</h1>
         <p className="subtitle">Who's in for {formatDate(thursday)}?</p>
       </header>
+
+      <section className="status-banner">
+        <h2 className="status-banner-title">Futsal Status</h2>
+        <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
+        {isAdmin && (
+          <div className="status-admin-actions">
+            {Object.keys(STATUS_LABELS).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
+                onClick={() => setStatus(key)}
+              >
+                {STATUS_LABELS[key]}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {cost && (
         <section className="cost-banner">

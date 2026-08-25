@@ -38,5 +38,10 @@ service cloud.firestore {
     match /costs/{cycleId} {
       allow read, write: if true;
     }
+    // Booking status for the week (counting / booked / cancelled), keyed by
+    // cycle date like responses/paid/costs.
+    match /matchStatus/{cycleId} {
+      allow read, write: if true;
+    }
   }
 }
