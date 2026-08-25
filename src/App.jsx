@@ -18,6 +18,32 @@ const ADMIN_SESSION_KEY = 'thursday-players:isAdmin'
 const REMEMBERED_CODE_PREFIX = 'thursday-players:code:'
 const rememberedCodeKey = (id) => `${REMEMBERED_CODE_PREFIX}${id}`
 const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_PASSWORD_HASH
+
+// Safari (private browsing, or "Prevent Cross-Site Tracking" in some
+// configurations) can throw on localStorage access instead of just being
+// unavailable. Remembering a code is a nice-to-have — it must never block
+// the actual move if storage isn't writable.
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // ignore — code just won't be remembered on this browser
+  }
+}
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}
 const PLAYERS_COLLECTION = 'players'
 const CODES_COLLECTION = 'playerCodes'
 const RESPONSES_COLLECTION = 'responses'
@@ -146,6 +172,11 @@ function App() {
   const [verifyAction, setVerifyAction] = useState(null)
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState('')
+  // Checking a remembered code against Firestore before deciding whether to
+  // show the prompt is a network round trip — on a slow connection that's
+  // silent time with no prompt and no move yet. Track it so the row can
+  // show something instead of looking hung.
+  const [checkingId, setCheckingId] = useState(null)
 
   useEffect(() => {
     ensureSeeded()
@@ -321,17 +352,17 @@ function App() {
   }
 
   async function tryRememberedMove(player, action) {
-    const raw = localStorage.getItem(rememberedCodeKey(player.id))
+    const raw = safeStorageGet(rememberedCodeKey(player.id))
     if (!raw) return false
     let saved
     try {
       saved = JSON.parse(raw)
     } catch {
-      localStorage.removeItem(rememberedCodeKey(player.id))
+      safeStorageRemove(rememberedCodeKey(player.id))
       return false
     }
     if (saved.date !== isoDate(new Date())) {
-      localStorage.removeItem(rememberedCodeKey(player.id))
+      safeStorageRemove(rememberedCodeKey(player.id))
       return false
     }
     const codeSnap = await getDoc(doc(db, CODES_COLLECTION, player.id))
@@ -340,7 +371,7 @@ function App() {
       MOVE_ACTIONS[action](player.id)
       return true
     }
-    localStorage.removeItem(rememberedCodeKey(player.id))
+    safeStorageRemove(rememberedCodeKey(player.id))
     return false
   }
 
@@ -349,7 +380,14 @@ function App() {
       MOVE_ACTIONS[action](player.id)
       return
     }
-    if (await tryRememberedMove(player, action)) return
+    setCheckingId(player.id)
+    let handled = false
+    try {
+      handled = await tryRememberedMove(player, action)
+    } finally {
+      setCheckingId(null)
+    }
+    if (handled) return
     setVerifyingId(player.id)
     setVerifyAction(action)
     setCodeInput('')
@@ -376,7 +414,7 @@ function App() {
     }
     const digitsHash = await sha256Hex(digits)
     if (digitsHash === storedHash) {
-      localStorage.setItem(
+      safeStorageSet(
         rememberedCodeKey(player.id),
         JSON.stringify({ hash: storedHash, date: isoDate(new Date()) }),
       )
@@ -421,10 +459,13 @@ function App() {
   function renderRow(p) {
     const status = responses[p.id]
     const isVerifying = verifyingId === p.id
+    const isChecking = checkingId === p.id
     return (
       <li key={p.id} className="player-row">
         <span className="player-name">{p.name}</span>
-        {isVerifying ? (
+        {isChecking ? (
+          <span className="checking">Checking…</span>
+        ) : isVerifying ? (
           renderVerifyForm(p)
         ) : (
           <div className="actions">
@@ -475,10 +516,13 @@ function App() {
 
   function renderPaidRow(p) {
     const isVerifying = verifyingId === p.id
+    const isChecking = checkingId === p.id
     return (
       <li key={p.id} className="player-row">
         <span className="player-name">{p.name}</span>
-        {isVerifying ? (
+        {isChecking ? (
+          <span className="checking">Checking…</span>
+        ) : isVerifying ? (
           renderVerifyForm(p)
         ) : (
           <div className="actions">

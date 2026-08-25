@@ -390,6 +390,11 @@
   color: #dc2626;
 }
 
+.checking {
+  font-size: 13px;
+  color: var(--text);
+}
+
 .choice {
   padding: 6px 12px;
   border-radius: 6px;
