@@ -205,8 +205,10 @@ function App() {
     setAddError('')
   }
 
-  async function removePlayer(id) {
+  async function removePlayer(player) {
     if (!isAdmin) return
+    if (!confirm(`Remove ${player.name}? This deletes their code and this week's response too.`)) return
+    const id = player.id
     await deleteDoc(doc(db, PLAYERS_COLLECTION, id))
     await deleteDoc(doc(db, CODES_COLLECTION, id))
     await setDoc(
@@ -429,7 +431,7 @@ function App() {
                 type="button"
                 className="remove"
                 aria-label={`Remove ${p.name}`}
-                onClick={() => removePlayer(p.id)}
+                onClick={() => removePlayer(p)}
               >
                 ×
               </button>
@@ -462,7 +464,7 @@ function App() {
                 type="button"
                 className="remove"
                 aria-label={`Remove ${p.name}`}
-                onClick={() => removePlayer(p.id)}
+                onClick={() => removePlayer(p)}
               >
                 ×
               </button>
