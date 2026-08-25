@@ -41,12 +41,12 @@ body::before {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(12, 12, 13, 0.82), rgba(12, 12, 13, 0.9)),
+    linear-gradient(rgba(12, 12, 13, 0.6), rgba(12, 12, 13, 0.72)),
     url('./assets/futsal-bg.jpg');
   background-size: cover;
   background-position: center;
-  filter: blur(16px);
-  transform: scale(1.1);
+  filter: blur(6px);
+  transform: scale(1.05);
   z-index: 0;
   pointer-events: none;
 }
