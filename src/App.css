@@ -406,14 +406,14 @@
   z-index: 200;
 }
 
-.flying-ball {
-  position: absolute;
+.flying-card {
+  position: fixed;
   top: 0;
   left: 0;
-  font-size: 22px;
-  line-height: 1;
+  margin: 0;
   will-change: transform;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  box-shadow: var(--shadow);
+  list-style: none;
 }
 
 .player-row.ball-landed {

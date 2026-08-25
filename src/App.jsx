@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   collection,
   deleteDoc,
@@ -241,59 +241,62 @@ function App() {
     return unsubscribe
   }, [responsesDocId])
 
-  // Fires after responses/paid change and the board has re-rendered rows
-  // into their new columns. For every move captured by runMove(), the old
-  // rect was grabbed at click time; now grab the landed rect and play the
-  // arc between them.
-  useEffect(() => {
+  // Fires synchronously after responses/paid change and the board has
+  // re-rendered rows into their new columns, but before the browser paints
+  // (useLayoutEffect, not useEffect) — so the real destination row can be
+  // hidden before it's ever shown, while a flying clone of the row (grabbed
+  // at click time by runMove) arcs from its old spot to its new one.
+  useLayoutEffect(() => {
     if (flightsRef.current.size === 0) return
     const pending = Array.from(flightsRef.current.entries())
     flightsRef.current.clear()
-    for (const [id, fromRect] of pending) {
+    for (const [id, flight] of pending) {
       const el = rowRefs.current.get(id)
       if (!el) continue
-      animateBall(fromRect, el)
+      animateCardArc(flight, el)
     }
   }, [responses, paid])
 
-  function animateBall(fromRect, toEl) {
+  function animateCardArc(flight, toEl) {
     const layer = ballLayerRef.current
     if (!layer) return
+    const fromRect = flight.rect
     const toRect = toEl.getBoundingClientRect()
-    const startX = fromRect.left + fromRect.width / 2
-    const startY = fromRect.top + fromRect.height / 2
-    const endX = toRect.left + toRect.width / 2
-    const endY = toRect.top + toRect.height / 2
-    const dist = Math.hypot(endX - startX, endY - startY)
+    const dist = Math.hypot(toRect.left - fromRect.left, toRect.top - fromRect.top)
     if (dist < 4) return // same spot — nothing to animate
 
-    const arcHeight = Math.min(140, Math.max(50, dist * 0.3))
-    const midX = (startX + endX) / 2
-    const midY = (startY + endY) / 2 - arcHeight
-    const duration = Math.min(900, Math.max(420, dist * 1.1))
-    const spins = Math.max(1, Math.round(dist / 140)) * 360
+    toEl.style.visibility = 'hidden'
 
-    const ball = document.createElement('div')
-    ball.className = 'flying-ball'
-    ball.textContent = '⚽'
-    layer.appendChild(ball)
+    const clone = flight.node
+    clone.classList.add('flying-card')
+    clone.style.width = `${fromRect.width}px`
+    clone.style.height = `${fromRect.height}px`
+    layer.appendChild(clone)
 
-    const steps = 24
+    const arcHeight = Math.min(120, Math.max(40, dist * 0.25))
+    const midX = (fromRect.left + toRect.left) / 2
+    const midY = (fromRect.top + toRect.top) / 2 - arcHeight
+    const duration = Math.min(750, Math.max(380, dist * 0.9))
+    const lean = toRect.left >= fromRect.left ? 1 : -1
+
+    const steps = 20
     const keyframes = []
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
-      const x = (1 - t) ** 2 * startX + 2 * (1 - t) * t * midX + t ** 2 * endX
-      const y = (1 - t) ** 2 * startY + 2 * (1 - t) * t * midY + t ** 2 * endY
-      const scale = 1 + Math.sin(Math.PI * t) * 0.15
+      const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * toRect.left
+      const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * toRect.top
+      const rotate = Math.sin(Math.PI * t) * 5 * lean
+      const scale = 1 - Math.sin(Math.PI * t) * 0.05
       keyframes.push({
-        transform: `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${spins * t}deg) scale(${scale})`,
+        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`,
         offset: t,
       })
     }
 
-    const anim = ball.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' })
+    const anim = clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
     const finish = () => {
-      ball.remove()
+      clone.remove()
+      toEl.style.visibility = ''
       toEl.classList.add('ball-landed')
       setTimeout(() => toEl.classList.remove('ball-landed'), 500)
     }
@@ -447,12 +450,14 @@ function App() {
     unpay: (id) => unpay(id),
   }
 
-  // Grabs the row's current position before the move actually runs, so the
-  // ball-arc effect (above) has a "from" rect to animate away from once the
-  // row lands in its new column.
+  // Grabs the row's current position and a visual clone before the move
+  // actually runs, so the card-arc effect (above) has a "from" snapshot to
+  // fly from once the real row lands in its new column.
   function runMove(id, action) {
     const el = rowRefs.current.get(id)
-    if (el) flightsRef.current.set(id, el.getBoundingClientRect())
+    if (el) {
+      flightsRef.current.set(id, { rect: el.getBoundingClientRect(), node: el.cloneNode(true) })
+    }
     MOVE_ACTIONS[action](id)
   }
 
