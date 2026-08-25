@@ -335,8 +335,14 @@ function App() {
     // pops in once the net has taken the impact.
     const fromCenterX = fromRect.left + fromRect.width / 2
     const fromCenterY = fromRect.top + fromRect.height / 2
-    const netCenterX = goalLeft + goalWidth / 2
-    const netCenterY = goalTop + goalHeight / 2
+    // Aim for the top-right corner of the net when traveling left-to-right,
+    // top-left when traveling right-to-left — a shot into the far top
+    // corner reads more like an actual goal than a flat shot into dead
+    // center.
+    const cornerInset = goalWidth * 0.14
+    const movingRight = fromRect.left <= toRect.left
+    const netCenterX = movingRight ? goalLeft + goalWidth - cornerInset : goalLeft + cornerInset
+    const netCenterY = goalTop + goalHeight * 0.24
     const arcHeight = Math.min(170, Math.max(60, dist * 0.32))
     const midCenterX = (fromCenterX + netCenterX) / 2
     const midCenterY = (fromCenterY + netCenterY) / 2 - arcHeight
