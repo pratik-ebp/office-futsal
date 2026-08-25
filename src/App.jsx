@@ -265,7 +265,7 @@ function App() {
     const dist = Math.hypot(toRect.left - fromRect.left, toRect.top - fromRect.top)
     if (dist < 4) return // same spot — nothing to animate
 
-    toEl.style.visibility = 'hidden'
+    toEl.classList.add('card-incoming')
 
     const clone = flight.node
     clone.classList.add('flying-card')
@@ -296,9 +296,9 @@ function App() {
     const anim = clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
     const finish = () => {
       clone.remove()
-      toEl.style.visibility = ''
-      toEl.classList.add('ball-landed')
-      setTimeout(() => toEl.classList.remove('ball-landed'), 500)
+      toEl.classList.remove('card-incoming')
+      toEl.classList.add('card-landed')
+      setTimeout(() => toEl.classList.remove('card-landed'), 500)
     }
     anim.onfinish = finish
     anim.oncancel = finish
