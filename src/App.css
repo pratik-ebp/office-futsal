@@ -498,7 +498,9 @@
 }
 
 .player-row.card-incoming {
-  opacity: 0;
+  opacity: 0.22;
+  outline: 2px dashed var(--accent-border);
+  outline-offset: 2px;
 }
 
 .player-row.card-landed {
@@ -507,7 +509,7 @@
 
 @keyframes card-landed {
   0% {
-    opacity: 0;
+    opacity: 0.22;
     transform: scale(0.9);
     box-shadow: 0 0 0 0 var(--accent-border);
   }

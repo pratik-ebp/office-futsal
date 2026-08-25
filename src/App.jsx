@@ -244,8 +244,9 @@ function App() {
   // Fires synchronously after responses/paid change and the board has
   // re-rendered rows into their new columns, but before the browser paints
   // (useLayoutEffect, not useEffect) — so the real destination row can be
-  // hidden before it's ever shown, while a flying clone of the row (grabbed
-  // at click time by runMove) arcs from its old spot to its new one.
+  // dimmed to a "landing here" placeholder before it's ever shown at full
+  // opacity, while a flying clone of the row (grabbed at click time by
+  // runMove) arcs from its old spot to its new one.
   useLayoutEffect(() => {
     if (flightsRef.current.size === 0) return
     const pending = Array.from(flightsRef.current.entries())
@@ -271,7 +272,7 @@ function App() {
     // the shot is taken, gone the moment the card lands — so the move reads
     // as scoring a goal rather than just an arc between two points.
     const goalWidth = Math.max(110, Math.min(170, toRect.width * 0.55))
-    const goalHeight = goalWidth * 0.68
+    const goalHeight = goalWidth * 0.34
     const goal = document.createElement('div')
     goal.className = 'goal-post'
     goal.style.width = `${goalWidth}px`
