@@ -59,6 +59,24 @@ const STATUS_LABELS = {
 // the doc and base64's ~33% size overhead over the raw image bytes.
 const MAX_IMAGE_DATA_URL_LENGTH = 700_000
 
+// A drawn classic black/white soccer-ball pattern (center pentagon + 5
+// wedges) rather than relying on the ⚽ emoji, which rendered inconsistently
+// (some platforms draw it flat/photorealistic, not the plain graphic look)
+// and, combined with the old non-square scaling approach, ended up looking
+// stretched like a rugby ball.
+const FOOTBALL_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#f5f5f5" stroke="#1a1a1a" stroke-width="2"/>
+  <polygon points="50,35 64.27,45.37 58.82,62.13 41.18,62.13 35.73,45.37" fill="#1a1a1a"/>
+  <polygon points="71.2,11.9 79.76,18.12 76.49,28.18 65.91,28.18 62.64,18.12" fill="#1a1a1a"/>
+  <polygon points="84.2,52.1 92.76,58.32 89.49,68.38 78.91,68.38 75.64,58.32" fill="#1a1a1a"/>
+  <polygon points="50,77 58.56,83.22 55.29,93.28 44.71,93.28 41.44,83.22" fill="#1a1a1a"/>
+  <polygon points="15.8,52.1 24.36,58.32 21.09,68.38 10.51,68.38 7.24,58.32" fill="#1a1a1a"/>
+  <polygon points="28.8,11.9 37.36,18.12 34.09,28.18 23.51,28.18 20.24,18.12" fill="#1a1a1a"/>
+</svg>
+`.trim()
+const FOOTBALL_DATA_URL = `data:image/svg+xml,${encodeURIComponent(FOOTBALL_SVG)}`
+
 function formatMoney(n) {
   return `Rs. ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -295,70 +313,68 @@ function App() {
     clone.classList.add('flying-card')
     clone.style.width = `${fromRect.width}px`
     clone.style.height = `${fromRect.height}px`
+    clone.style.left = `${fromRect.left}px`
+    clone.style.top = `${fromRect.top}px`
     layer.appendChild(clone)
 
-    // Move the clone's real content (name + buttons) into its own wrapper so
-    // it can fade out independently while a football fades in over it — the
-    // card "becomes" the ball for most of the flight, and reverses right at
-    // the end.
-    const contentWrap = document.createElement('div')
-    contentWrap.className = 'flying-card-content'
-    while (clone.firstChild) contentWrap.appendChild(clone.firstChild)
-    clone.appendChild(contentWrap)
-    const ballFace = document.createElement('div')
-    ballFace.className = 'flying-ball-face'
-    ballFace.innerHTML = '<span class="flying-ball-face-icon">⚽</span>'
-    clone.appendChild(ballFace)
+    // A separate, always-square ball — not the card scaled down. Scaling a
+    // wide rectangular card down non-uniformly to fake a circle (the
+    // previous approach) rendered as an ellipse/rugby-ball whenever its
+    // aspect ratio wasn't exactly compensated for, and any rotation on top
+    // of that made it worse. A dedicated square element with its own
+    // circular pattern is circular no matter what.
+    const ballSize = 42
+    const ball = document.createElement('div')
+    ball.className = 'flying-ball'
+    ball.style.width = `${ballSize}px`
+    ball.style.height = `${ballSize}px`
+    ball.style.backgroundImage = `radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 45%), url("${FOOTBALL_DATA_URL}")`
+    layer.appendChild(ball)
 
     // The ball flies INTO the net, not to the row itself — the row only
     // pops in once the net has taken the impact.
+    const fromCenterX = fromRect.left + fromRect.width / 2
+    const fromCenterY = fromRect.top + fromRect.height / 2
     const netCenterX = goalLeft + goalWidth / 2
     const netCenterY = goalTop + goalHeight / 2
-    const endX = netCenterX - fromRect.width / 2
-    const endY = netCenterY - fromRect.height / 2
     const arcHeight = Math.min(170, Math.max(60, dist * 0.32))
-    const midX = (fromRect.left + endX) / 2
-    const midY = (fromRect.top + endY) / 2 - arcHeight
+    const midCenterX = (fromCenterX + netCenterX) / 2
+    const midCenterY = (fromCenterY + netCenterY) / 2 - arcHeight
     const duration = Math.min(1150, Math.max(600, dist * 1.2))
     const spins = Math.max(2, Math.round(dist / 110))
-    const ballSize = 42
-    const sxTarget = ballSize / fromRect.width
-    const syTarget = ballSize / fromRect.height
-    // Ball-shape envelope: rises fast to fully-a-ball early and then stays a
-    // ball for the rest of the flight — it doesn't un-morph back into a card
-    // mid-air. The row reforms as a card separately, after impact.
+    // Crossfade envelope: card fades out, ball fades in, over the first
+    // slice of the flight — then the ball is the only thing flying for the
+    // rest of the arc, all the way to impact.
     const riseEnd = 0.16
     const smoothstep = (x) => x * x * (3 - 2 * x)
-    const shrinkAt = (t) => (t < riseEnd ? smoothstep(t / riseEnd) : 1)
+    const revealAt = (t) => (t < riseEnd ? smoothstep(t / riseEnd) : 1)
+
+    clone.animate(
+      [
+        { opacity: 1, transform: 'translateY(0)', offset: 0 },
+        { opacity: 0, transform: 'translateY(-14px)', offset: 1 },
+      ],
+      { duration: duration * riseEnd, easing: 'ease-out', fill: 'forwards' },
+    )
 
     const steps = 30
-    const keyframes = []
-    const contentFrames = []
-    const faceFrames = []
+    const ballFrames = []
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
-      const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * endX
-      const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * endY
-      const shrink = shrinkAt(t)
+      const x = (1 - t) ** 2 * fromCenterX + 2 * (1 - t) * t * midCenterX + t ** 2 * netCenterX - ballSize / 2
+      const y = (1 - t) ** 2 * fromCenterY + 2 * (1 - t) * t * midCenterY + t ** 2 * netCenterY - ballSize / 2
       const rotate = spins * 360 * t
-      const sx = 1 + (sxTarget - 1) * shrink
-      const sy = 1 + (syTarget - 1) * shrink
-      const radius = 12 + shrink * 38 // 12% (card-ish) -> 50% (circle)
-      keyframes.push({
-        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${sx}, ${sy})`,
-        borderRadius: `${radius}%`,
+      ballFrames.push({
+        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg)`,
+        opacity: revealAt(t),
         offset: t,
       })
-      contentFrames.push({ opacity: 1 - shrink, offset: t })
-      faceFrames.push({ opacity: shrink, offset: t })
     }
 
     // Outer timing is linear — the keyframes above already carry their own
     // easing (the rise curve, the bezier arc), so a second eased timing
     // function on top would just distort it.
-    clone.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' })
-    contentWrap.animate(contentFrames, { duration, easing: 'linear', fill: 'forwards' })
-    const anim = ballFace.animate(faceFrames, { duration, easing: 'linear', fill: 'forwards' })
+    const anim = ball.animate(ballFrames, { duration, easing: 'linear', fill: 'forwards' })
 
     const revealDestination = () => {
       const goalFade = goal.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' })
@@ -378,8 +394,9 @@ function App() {
     // just caught a shot. The move only completes (row reveal) once that
     // bulge has played, not the instant the ball arrives.
     const impact = () => {
-      clone.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-out', fill: 'forwards' }).onfinish = () =>
-        clone.remove()
+      clone.remove() // already faded out during the crossfade, just cleanup
+      ball.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, easing: 'ease-out', fill: 'forwards' }).onfinish = () =>
+        ball.remove()
       const bulge = net.animate(
         [
           { transform: 'scale(1, 1)', offset: 0 },
