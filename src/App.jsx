@@ -273,27 +273,66 @@ function App() {
     clone.style.height = `${fromRect.height}px`
     layer.appendChild(clone)
 
+    // Move the clone's real content (name + buttons) into its own wrapper so
+    // it can fade out independently while a ball glyph fades in over it —
+    // the card "becomes" the ball at the peak of the arc, then reverses.
+    const contentWrap = document.createElement('div')
+    contentWrap.className = 'flying-card-content'
+    while (clone.firstChild) contentWrap.appendChild(clone.firstChild)
+    clone.appendChild(contentWrap)
+    const ballFace = document.createElement('div')
+    ballFace.className = 'flying-ball-face'
+    ballFace.textContent = '⚽'
+    clone.appendChild(ballFace)
+
     const arcHeight = Math.min(120, Math.max(40, dist * 0.25))
     const midX = (fromRect.left + toRect.left) / 2
     const midY = (fromRect.top + toRect.top) / 2 - arcHeight
     const duration = Math.min(750, Math.max(380, dist * 0.9))
-    const lean = toRect.left >= fromRect.left ? 1 : -1
+    const spins = Math.max(1, Math.round(dist / 140))
+    const ballSize = 40
+    const sxTarget = ballSize / fromRect.width
+    const syTarget = ballSize / fromRect.height
 
-    const steps = 20
+    const steps = 24
     const keyframes = []
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
       const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * toRect.left
       const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * toRect.top
-      const rotate = Math.sin(Math.PI * t) * 5 * lean
-      const scale = 1 - Math.sin(Math.PI * t) * 0.05
+      // 0 at both ends (full card), 1 at the arc's peak (fully a ball) —
+      // drives shape, size, and rotation together so they all "arrive" and
+      // "depart" the ball state in sync.
+      const shrink = Math.sin(Math.PI * t)
+      const rotate = spins * 360 * t
+      const sx = 1 + (sxTarget - 1) * shrink
+      const sy = 1 + (syTarget - 1) * shrink
+      const radius = 12 + shrink * 38 // 12% (card-ish) -> 50% (circle)
       keyframes.push({
-        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`,
+        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${sx}, ${sy})`,
+        borderRadius: `${radius}%`,
         offset: t,
       })
     }
 
-    const anim = clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
+    clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
+    const fadeDuration = { duration, easing: 'ease-in-out', fill: 'forwards' }
+    contentWrap.animate(
+      [
+        { opacity: 1, offset: 0 },
+        { opacity: 0, offset: 0.5 },
+        { opacity: 1, offset: 1 },
+      ],
+      fadeDuration,
+    )
+    const anim = ballFace.animate(
+      [
+        { opacity: 0, offset: 0 },
+        { opacity: 1, offset: 0.5 },
+        { opacity: 0, offset: 1 },
+      ],
+      fadeDuration,
+    )
     const finish = () => {
       clone.remove()
       // The destination column can be far from wherever the player had
