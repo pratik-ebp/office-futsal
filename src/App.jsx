@@ -296,6 +296,11 @@ function App() {
     const anim = clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
     const finish = () => {
       clone.remove()
+      // The destination column can be far from wherever the player had
+      // scrolled to (e.g. scrolled to the bottom of a long Pending list,
+      // moving to In near the top) — bring the landed card into view before
+      // revealing it so the move doesn't look like it silently vanished.
+      toEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
       toEl.classList.remove('card-incoming')
       toEl.classList.add('card-landed')
       setTimeout(() => toEl.classList.remove('card-landed'), 500)
