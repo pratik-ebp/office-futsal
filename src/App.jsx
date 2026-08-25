@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   collection,
   deleteDoc,
@@ -20,6 +20,36 @@ const PLAYERS_COLLECTION = 'players'
 const CODES_COLLECTION = 'playerCodes'
 const RESPONSES_COLLECTION = 'responses'
 const PAID_COLLECTION = 'paid'
+const COSTS_COLLECTION = 'costs'
+// Firestore docs cap out at 1 MiB; leave headroom for the other fields on
+// the doc and base64's ~33% size overhead over the raw image bytes.
+const MAX_IMAGE_DATA_URL_LENGTH = 700_000
+
+function formatMoney(n) {
+  return `Rs. ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Downscale + re-encode the picked file as JPEG, retrying smaller until it
+// fits under MAX_IMAGE_DATA_URL_LENGTH. Returns null if even the smallest
+// attempt is still too big (e.g. someone picks an absurdly detailed photo).
+async function compressImage(file) {
+  const bitmap = await createImageBitmap(file)
+  const attempts = [
+    { maxDim: 1000, quality: 0.75 },
+    { maxDim: 800, quality: 0.6 },
+    { maxDim: 600, quality: 0.5 },
+  ]
+  for (const { maxDim, quality } of attempts) {
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const dataUrl = canvas.toDataURL('image/jpeg', quality)
+    if (dataUrl.length < MAX_IMAGE_DATA_URL_LENGTH) return dataUrl
+  }
+  return null
+}
 
 function slugify(name) {
   return name
@@ -87,10 +117,18 @@ function App() {
   const [players, setPlayers] = useState([])
   const [responses, setResponses] = useState({})
   const [paid, setPaid] = useState({})
+  const [cost, setCost] = useState(null)
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
   const [addError, setAddError] = useState('')
+
+  const costImageRef = useRef(null)
+  const [costTotalInput, setCostTotalInput] = useState('')
+  const [costPlayerCountInput, setCostPlayerCountInput] = useState('')
+  const [costError, setCostError] = useState('')
+  const [costSaving, setCostSaving] = useState(false)
+  const [imageExpanded, setImageExpanded] = useState(false)
 
   const [isAdmin, setIsAdmin] = useState(
     () => sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
@@ -130,6 +168,22 @@ function App() {
     })
     return unsubscribe
   }, [responsesDocId])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, COSTS_COLLECTION, responsesDocId), (snap) => {
+      setCost(snap.exists() ? snap.data() : null)
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
+  // Prefill the admin edit fields once, when this week's cost doc first
+  // loads — but only if the admin hasn't started typing into them yet.
+  useEffect(() => {
+    if (cost && costTotalInput === '' && costPlayerCountInput === '') {
+      setCostTotalInput(String(cost.totalCost))
+      setCostPlayerCountInput(String(cost.playerCount))
+    }
+  }, [cost])
 
   async function addPlayer(e) {
     e.preventDefault()
@@ -208,6 +262,49 @@ function App() {
     if (!confirm('Move every player back to Pending? This clears In/Out/Paid for this week.')) return
     await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
+  }
+
+  async function saveCost(e) {
+    e.preventDefault()
+    if (!isAdmin) return
+    setCostError('')
+
+    const totalCost = parseFloat(costTotalInput)
+    const playerCount = parseInt(costPlayerCountInput, 10)
+    if (!(totalCost > 0)) {
+      setCostError('Enter a total cost greater than 0.')
+      return
+    }
+    if (!(playerCount > 0)) {
+      setCostError('Enter a number of players greater than 0.')
+      return
+    }
+
+    const file = costImageRef.current?.files?.[0]
+    let imageDataUrl = cost?.imageDataUrl ?? null
+    if (file) {
+      setCostSaving(true)
+      try {
+        imageDataUrl = await compressImage(file)
+      } catch {
+        setCostError('Could not read that image.')
+        setCostSaving(false)
+        return
+      }
+      if (!imageDataUrl) {
+        setCostError('Image too large — try a smaller or simpler photo.')
+        setCostSaving(false)
+        return
+      }
+    } else if (!imageDataUrl) {
+      setCostError('Add an image.')
+      return
+    }
+
+    setCostSaving(true)
+    await setDoc(doc(db, COSTS_COLLECTION, responsesDocId), { imageDataUrl, totalCost, playerCount })
+    if (costImageRef.current) costImageRef.current.value = ''
+    setCostSaving(false)
   }
 
   const MOVE_ACTIONS = {
@@ -415,6 +512,66 @@ function App() {
         <h1>Thursday Players</h1>
         <p className="subtitle">Who's in for {formatDate(thursday)}?</p>
       </header>
+
+      {cost && (
+        <section className="cost-banner">
+          <img
+            src={cost.imageDataUrl}
+            alt="Cost receipt"
+            className="cost-thumb"
+            onClick={() => setImageExpanded(true)}
+          />
+          <div className="cost-details">
+            <div className="cost-row">
+              <span>Total cost</span>
+              <strong>{formatMoney(cost.totalCost)}</strong>
+            </div>
+            <div className="cost-row">
+              <span>Players</span>
+              <strong>{cost.playerCount}</strong>
+            </div>
+            <div className="cost-share">
+              <span>Each's share</span>
+              <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {imageExpanded && cost && (
+        <div className="lightbox" onClick={() => setImageExpanded(false)}>
+          <img src={cost.imageDataUrl} alt="Cost receipt, full size" />
+        </div>
+      )}
+
+      {isAdmin && (
+        <form className="cost-form" onSubmit={saveCost}>
+          <h3 className="cost-form-title">Cost breakdown</h3>
+          <div className="cost-form-row">
+            <input type="file" accept="image/*" ref={costImageRef} />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Total cost"
+              value={costTotalInput}
+              onChange={(e) => setCostTotalInput(e.target.value)}
+            />
+            <input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="No. of players"
+              value={costPlayerCountInput}
+              onChange={(e) => setCostPlayerCountInput(e.target.value)}
+            />
+            <button type="submit" disabled={costSaving}>
+              {costSaving ? 'Saving…' : cost ? 'Update' : 'Save'}
+            </button>
+          </div>
+          {costError && <span className="login-error">{costError}</span>}
+        </form>
+      )}
 
       {isAdmin && (
         <form className="add-form" onSubmit={addPlayer}>

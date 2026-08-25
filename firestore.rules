@@ -31,5 +31,12 @@ service cloud.firestore {
       allow list: if false;
       allow write: if true;
     }
+    // Weekly cost breakdown (receipt image + total + player count), keyed by
+    // cycle date like responses/paid. Image is stored as a compressed
+    // base64 data URL directly on the doc (no Firebase Storage) to keep
+    // this on the free Spark plan.
+    match /costs/{cycleId} {
+      allow read, write: if true;
+    }
   }
 }
