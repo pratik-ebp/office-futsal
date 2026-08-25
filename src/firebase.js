@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,4 +11,8 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
+// Safari's WebChannel transport auto-detection can pick a slow path
+// (multi-second one-off reads like getDoc), especially outside an active
+// onSnapshot stream. Auto-detecting long-polling fixes that on Safari
+// without changing behavior on Chrome/Firefox, which don't need it.
+export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true })
