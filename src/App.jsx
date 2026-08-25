@@ -617,50 +617,52 @@ function App() {
         <p className="subtitle">Who's in for {formatDate(thursday)}?</p>
       </header>
 
-      <section className="status-banner">
-        <h2 className="status-banner-title">Futsal Status</h2>
-        <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
-        {isAdmin && (
-          <div className="status-admin-actions">
-            {Object.keys(STATUS_LABELS).map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
-                onClick={() => setStatus(key)}
-              >
-                {STATUS_LABELS[key]}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {cost && (
-        <section className="cost-banner">
-          <h2 className="cost-banner-title">Last week's payment to:</h2>
-          <img
-            src={cost.imageDataUrl}
-            alt="Cost receipt"
-            className="cost-thumb"
-            onClick={() => setImageExpanded(true)}
-          />
-          <div className="cost-details">
-            <div className="cost-row">
-              <span>Total cost</span>
-              <strong>{formatMoney(cost.totalCost)}</strong>
+      <div className="top-panels">
+        <section className="status-banner">
+          <h2 className="status-banner-title">Futsal Status</h2>
+          <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
+          {isAdmin && (
+            <div className="status-admin-actions">
+              {Object.keys(STATUS_LABELS).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
+                  onClick={() => setStatus(key)}
+                >
+                  {STATUS_LABELS[key]}
+                </button>
+              ))}
             </div>
-            <div className="cost-row">
-              <span>Players</span>
-              <strong>{cost.playerCount}</strong>
-            </div>
-            <div className="cost-share">
-              <span>Each's share</span>
-              <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
-            </div>
-          </div>
+          )}
         </section>
-      )}
+
+        {cost && (
+          <section className="cost-banner">
+            <h2 className="cost-banner-title">Last week's payment to:</h2>
+            <img
+              src={cost.imageDataUrl}
+              alt="Cost receipt"
+              className="cost-thumb"
+              onClick={() => setImageExpanded(true)}
+            />
+            <div className="cost-details">
+              <div className="cost-row">
+                <span>Total cost</span>
+                <strong>{formatMoney(cost.totalCost)}</strong>
+              </div>
+              <div className="cost-row">
+                <span>Players</span>
+                <strong>{cost.playerCount}</strong>
+              </div>
+              <div className="cost-share">
+                <span>Each's share</span>
+                <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
 
       {imageExpanded && cost && (
         <div className="lightbox" onClick={() => setImageExpanded(false)}>
