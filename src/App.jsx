@@ -406,11 +406,11 @@ function App() {
       const bulge = net.animate(
         [
           { transform: 'scale(1, 1)', offset: 0 },
-          { transform: 'scale(1.3, 0.8) translateY(6px)', offset: 0.35 },
-          { transform: 'scale(0.94, 1.08) translateY(-2px)', offset: 0.65 },
+          { transform: 'scale(1.08, 0.95) translateY(2px)', offset: 0.35 },
+          { transform: 'scale(0.98, 1.02) translateY(-1px)', offset: 0.65 },
           { transform: 'scale(1, 1)', offset: 1 },
         ],
-        { duration: 340, easing: 'ease-out' },
+        { duration: 300, easing: 'ease-out' },
       )
       bulge.onfinish = revealDestination
       bulge.oncancel = revealDestination
