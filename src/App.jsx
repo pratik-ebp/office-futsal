@@ -285,25 +285,36 @@ function App() {
     ballFace.textContent = '⚽'
     clone.appendChild(ballFace)
 
-    const arcHeight = Math.min(120, Math.max(40, dist * 0.25))
+    const arcHeight = Math.min(170, Math.max(60, dist * 0.32))
     const midX = (fromRect.left + toRect.left) / 2
     const midY = (fromRect.top + toRect.top) / 2 - arcHeight
-    const duration = Math.min(750, Math.max(380, dist * 0.9))
-    const spins = Math.max(1, Math.round(dist / 140))
-    const ballSize = 40
+    const duration = Math.min(1150, Math.max(600, dist * 1.2))
+    const spins = Math.max(2, Math.round(dist / 110))
+    const ballSize = 42
     const sxTarget = ballSize / fromRect.width
     const syTarget = ballSize / fromRect.height
+    // Ball-shape "envelope": rises fast to fully-a-ball early, holds there
+    // for most of the flight, and only eases back to a full card right at
+    // the end — a plateau rather than a brief peak, so it spends most of
+    // the arc actually looking and rolling like a football.
+    const riseEnd = 0.16
+    const fallStart = 0.86
+    const smoothstep = (x) => x * x * (3 - 2 * x)
+    function shrinkAt(t) {
+      if (t < riseEnd) return smoothstep(t / riseEnd)
+      if (t > fallStart) return smoothstep((1 - t) / (1 - fallStart))
+      return 1
+    }
 
-    const steps = 24
+    const steps = 30
     const keyframes = []
+    const contentFrames = []
+    const faceFrames = []
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
       const x = (1 - t) ** 2 * fromRect.left + 2 * (1 - t) * t * midX + t ** 2 * toRect.left
       const y = (1 - t) ** 2 * fromRect.top + 2 * (1 - t) * t * midY + t ** 2 * toRect.top
-      // 0 at both ends (full card), 1 at the arc's peak (fully a ball) —
-      // drives shape, size, and rotation together so they all "arrive" and
-      // "depart" the ball state in sync.
-      const shrink = Math.sin(Math.PI * t)
+      const shrink = shrinkAt(t)
       const rotate = spins * 360 * t
       const sx = 1 + (sxTarget - 1) * shrink
       const sy = 1 + (syTarget - 1) * shrink
@@ -313,26 +324,16 @@ function App() {
         borderRadius: `${radius}%`,
         offset: t,
       })
+      contentFrames.push({ opacity: 1 - shrink, offset: t })
+      faceFrames.push({ opacity: shrink, offset: t })
     }
 
-    clone.animate(keyframes, { duration, easing: 'ease-in-out', fill: 'forwards' })
-    const fadeDuration = { duration, easing: 'ease-in-out', fill: 'forwards' }
-    contentWrap.animate(
-      [
-        { opacity: 1, offset: 0 },
-        { opacity: 0, offset: 0.5 },
-        { opacity: 1, offset: 1 },
-      ],
-      fadeDuration,
-    )
-    const anim = ballFace.animate(
-      [
-        { opacity: 0, offset: 0 },
-        { opacity: 1, offset: 0.5 },
-        { opacity: 0, offset: 1 },
-      ],
-      fadeDuration,
-    )
+    // Outer timing is linear — the keyframes above already carry their own
+    // easing (the plateau curve, the bezier arc), so a second eased timing
+    // function on top would just distort it.
+    clone.animate(keyframes, { duration, easing: 'linear', fill: 'forwards' })
+    contentWrap.animate(contentFrames, { duration, easing: 'linear', fill: 'forwards' })
+    const anim = ballFace.animate(faceFrames, { duration, easing: 'linear', fill: 'forwards' })
     const finish = () => {
       clone.remove()
       // The destination column can be far from wherever the player had
