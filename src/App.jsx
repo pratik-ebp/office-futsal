@@ -15,6 +15,8 @@ import { ROSTER } from './data/roster'
 import './App.css'
 
 const ADMIN_SESSION_KEY = 'thursday-players:isAdmin'
+const REMEMBERED_CODE_PREFIX = 'thursday-players:code:'
+const rememberedCodeKey = (id) => `${REMEMBERED_CODE_PREFIX}${id}`
 const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_PASSWORD_HASH
 const PLAYERS_COLLECTION = 'players'
 const CODES_COLLECTION = 'playerCodes'
@@ -318,11 +320,36 @@ function App() {
     unpay: (id) => unpay(id),
   }
 
-  function requestMove(player, action) {
+  async function tryRememberedMove(player, action) {
+    const raw = localStorage.getItem(rememberedCodeKey(player.id))
+    if (!raw) return false
+    let saved
+    try {
+      saved = JSON.parse(raw)
+    } catch {
+      localStorage.removeItem(rememberedCodeKey(player.id))
+      return false
+    }
+    if (saved.date !== isoDate(new Date())) {
+      localStorage.removeItem(rememberedCodeKey(player.id))
+      return false
+    }
+    const codeSnap = await getDoc(doc(db, CODES_COLLECTION, player.id))
+    const storedHash = codeSnap.exists() ? codeSnap.data().codeHash : null
+    if (storedHash && storedHash === saved.hash) {
+      MOVE_ACTIONS[action](player.id)
+      return true
+    }
+    localStorage.removeItem(rememberedCodeKey(player.id))
+    return false
+  }
+
+  async function requestMove(player, action) {
     if (isAdmin) {
       MOVE_ACTIONS[action](player.id)
       return
     }
+    if (await tryRememberedMove(player, action)) return
     setVerifyingId(player.id)
     setVerifyAction(action)
     setCodeInput('')
@@ -349,6 +376,10 @@ function App() {
     }
     const digitsHash = await sha256Hex(digits)
     if (digitsHash === storedHash) {
+      localStorage.setItem(
+        rememberedCodeKey(player.id),
+        JSON.stringify({ hash: storedHash, date: isoDate(new Date()) }),
+      )
       MOVE_ACTIONS[verifyAction](player.id)
       cancelVerify()
     } else {
