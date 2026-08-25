@@ -618,25 +618,6 @@ function App() {
       </header>
 
       <div className="top-panels">
-        <section className="status-banner">
-          <h2 className="status-banner-title">Futsal Status</h2>
-          <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
-          {isAdmin && (
-            <div className="status-admin-actions">
-              {Object.keys(STATUS_LABELS).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
-                  onClick={() => setStatus(key)}
-                >
-                  {STATUS_LABELS[key]}
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
         {cost && (
           <section className="cost-banner">
             <h2 className="cost-banner-title">Last week's payment to:</h2>
@@ -720,15 +701,35 @@ function App() {
         </form>
       )}
 
-      {players.length > 0 && (
-        <input
-          type="search"
-          className="search-input"
-          placeholder="Search players…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      )}
+      <div className="search-row">
+        {players.length > 0 && (
+          <input
+            type="search"
+            className="search-input"
+            placeholder="Search players…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
+        <div className="status-inline">
+          <span className="status-inline-title">Futsal Status:</span>
+          <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
+          {isAdmin && (
+            <div className="status-admin-actions">
+              {Object.keys(STATUS_LABELS).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
+                  onClick={() => setStatus(key)}
+                >
+                  {STATUS_LABELS[key]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {loading ? (
         <p className="empty">Loading players…</p>
