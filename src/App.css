@@ -626,6 +626,18 @@
   flex-wrap: wrap;
 }
 
+.player-row.stale {
+  border-color: #eab308;
+  box-shadow: 0 0 0 1px #eab308;
+}
+
+.stale-warning {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #eab308;
+}
+
 .player-name {
   font-weight: 500;
   color: var(--text-h);

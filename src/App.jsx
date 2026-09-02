@@ -7,6 +7,7 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  serverTimestamp,
   setDoc,
   writeBatch,
 } from 'firebase/firestore'
@@ -68,6 +69,11 @@ const STATUS_LABELS = {
 // Firestore docs cap out at 1 MiB; leave headroom for the other fields on
 // the doc and base64's ~33% size overhead over the raw image bytes.
 const MAX_IMAGE_DATA_URL_LENGTH = 700_000
+// A player who hasn't made a single In/Out/Undo/Pay move in this many days
+// gets a warning on their card; at 4x that, the warning explains they'd be
+// removed (removal itself stays a manual admin action, this just tells them).
+const INACTIVITY_WARNING_DAYS = 14
+const INACTIVITY_REMOVAL_DAYS = 28
 
 // A drawn classic black/white soccer-ball pattern (center pentagon + 5
 // wedges) rather than relying on the ⚽ emoji, which rendered inconsistently
@@ -145,9 +151,35 @@ async function ensureSeeded() {
   if (!snap.empty) return
   const batch = writeBatch(db)
   for (const name of ROSTER) {
-    batch.set(doc(db, PLAYERS_COLLECTION, slugify(name)), { name })
+    batch.set(doc(db, PLAYERS_COLLECTION, slugify(name)), { name, lastMovedAt: serverTimestamp() })
   }
   await batch.commit()
+}
+
+// Players created before movement tracking existed have no lastMovedAt.
+// Give them one (now) the first time anyone loads the app post-deploy, so
+// the 14/28-day inactivity clock starts from today instead of either
+// silently never firing or firing for everyone at once. Safe to call every
+// load — a no-op once every player doc has the field.
+async function backfillLastMovedAt() {
+  const snap = await getDocs(collection(db, PLAYERS_COLLECTION))
+  const missing = snap.docs.filter((d) => !d.data().lastMovedAt)
+  if (missing.length === 0) return
+  const batch = writeBatch(db)
+  for (const d of missing) {
+    batch.set(doc(db, PLAYERS_COLLECTION, d.id), { lastMovedAt: serverTimestamp() }, { merge: true })
+  }
+  await batch.commit()
+}
+
+// Firestore Timestamp (server-confirmed) or Date (rare local fallback) → whole
+// days elapsed. Null while a brand-new player's serverTimestamp() write
+// hasn't round-tripped yet, or for rows (e.g. Last played) that don't carry
+// this field at all.
+function daysSinceMoved(p) {
+  if (!p.lastMovedAt) return null
+  const moved = typeof p.lastMovedAt.toDate === 'function' ? p.lastMovedAt.toDate() : new Date(p.lastMovedAt)
+  return Math.floor((Date.now() - moved.getTime()) / (24 * 60 * 60 * 1000))
 }
 
 function App() {
@@ -227,9 +259,9 @@ function App() {
   }
 
   useEffect(() => {
-    ensureSeeded()
+    ensureSeeded().then(backfillLastMovedAt)
     const unsubscribe = onSnapshot(collection(db, PLAYERS_COLLECTION), (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, name: d.data().name }))
+      const list = snap.docs.map((d) => ({ id: d.id, name: d.data().name, lastMovedAt: d.data().lastMovedAt ?? null }))
       list.sort((a, b) => a.name.localeCompare(b.name))
       setPlayers(list)
       setLoading(false)
@@ -505,7 +537,7 @@ function App() {
     }
     const id = slugify(name) || crypto.randomUUID()
     const codeHash = await sha256Hex(code)
-    await setDoc(doc(db, PLAYERS_COLLECTION, id), { name })
+    await setDoc(doc(db, PLAYERS_COLLECTION, id), { name, lastMovedAt: serverTimestamp() })
     await setDoc(doc(db, CODES_COLLECTION, id), { codeHash })
     setNewName('')
     setNewCode('')
@@ -680,6 +712,12 @@ function App() {
       flightsRef.current.set(id, { rect: el.getBoundingClientRect(), node: el.cloneNode(true) })
     }
     MOVE_ACTIONS[action](id)
+    // Only actions on the live roster count toward the inactivity clock —
+    // correcting a Last played record (activeDocId === LAST_PLAYED_DOC_ID)
+    // is historical bookkeeping, not the player showing up this week.
+    if (activeDocId === CURRENT_DOC_ID) {
+      setDoc(doc(db, PLAYERS_COLLECTION, id), { lastMovedAt: serverTimestamp() }, { merge: true })
+    }
   }
 
   async function tryRememberedMove(player, action) {
@@ -772,6 +810,26 @@ function App() {
   const outPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => displayPaid[p.id])
 
+  // Last played rows share this shape but never carry lastMovedAt, so
+  // daysSinceMoved is naturally null there and no warning shows — no
+  // activeTab check needed.
+  function rowClassName(p) {
+    const days = daysSinceMoved(p)
+    const stale = days !== null && days >= INACTIVITY_WARNING_DAYS
+    return `player-row${stale ? ' stale' : ''}`
+  }
+
+  function renderStaleWarning(p) {
+    const days = daysSinceMoved(p)
+    if (days === null || days < INACTIVITY_WARNING_DAYS) return null
+    return (
+      <p className="stale-warning">
+        You haven't shown any movement for {days} day{days === 1 ? '' : 's'}. After{' '}
+        {INACTIVITY_REMOVAL_DAYS / 7} weeks your account would be removed.
+      </p>
+    )
+  }
+
   function renderVerifyForm(p) {
     return (
       <div className="verify-form">
@@ -798,7 +856,7 @@ function App() {
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
     return (
-      <li key={p.id} ref={setRowRef(p.id)} className="player-row">
+      <li key={p.id} ref={setRowRef(p.id)} className={rowClassName(p)}>
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
@@ -847,6 +905,7 @@ function App() {
             )}
           </div>
         )}
+        {renderStaleWarning(p)}
       </li>
     )
   }
@@ -855,7 +914,7 @@ function App() {
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
     return (
-      <li key={p.id} ref={setRowRef(p.id)} className="player-row">
+      <li key={p.id} ref={setRowRef(p.id)} className={rowClassName(p)}>
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
@@ -883,6 +942,7 @@ function App() {
             )}
           </div>
         )}
+        {renderStaleWarning(p)}
       </li>
     )
   }
