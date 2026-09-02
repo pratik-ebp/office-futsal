@@ -810,18 +810,23 @@ function App() {
   const outPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => displayPaid[p.id])
 
-  // Last played rows share this shape but never carry lastMovedAt, so
-  // daysSinceMoved is naturally null there and no warning shows — no
-  // activeTab check needed.
-  function rowClassName(p) {
+  // Only Pending — a player who has moved to In/Out/Paid has, by
+  // definition, moved. Last played rows share this shape but never carry
+  // lastMovedAt, so daysSinceMoved is naturally null there and no warning
+  // shows — no activeTab check needed.
+  function isStalePending(p) {
+    if (displayResponses[p.id]) return false // In or Out already — not pending
     const days = daysSinceMoved(p)
-    const stale = days !== null && days >= INACTIVITY_WARNING_DAYS
-    return `player-row${stale ? ' stale' : ''}`
+    return days !== null && days >= INACTIVITY_WARNING_DAYS
+  }
+
+  function rowClassName(p) {
+    return `player-row${isStalePending(p) ? ' stale' : ''}`
   }
 
   function renderStaleWarning(p) {
+    if (!isStalePending(p)) return null
     const days = daysSinceMoved(p)
-    if (days === null || days < INACTIVITY_WARNING_DAYS) return null
     return (
       <p className="stale-warning">
         You haven't shown any movement for {days} day{days === 1 ? '' : 's'}. After{' '}
