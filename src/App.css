@@ -362,7 +362,8 @@
 }
 
 .cost-form-row input[type='number'],
-.cost-form-row input[type='text'] {
+.cost-form-row input[type='text'],
+.cost-form-row input[type='date'] {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;

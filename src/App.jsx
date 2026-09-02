@@ -142,6 +142,19 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10)
 }
 
+// A native <input type="date"> gives back "YYYY-MM-DD". Appending a local
+// midnight time (rather than parsing the bare date string, which Date
+// treats as UTC) avoids the day shifting backward one in timezones behind
+// UTC. Returns the weekday and "Month Day" pair the rest of the app stores
+// and displays (e.g. "Thursday" / "September 3").
+function formatDayAndDate(isoDateStr) {
+  const d = new Date(`${isoDateStr}T00:00:00`)
+  return {
+    day: d.toLocaleDateString('en-US', { weekday: 'long' }),
+    date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }),
+  }
+}
+
 // One-time (per empty database) seed from the roster file. Safe to call on
 // every load — it's a no-op once any player doc exists. Seeded players get
 // no code; run scripts/assign-codes.mjs afterward to assign them (writes to
@@ -193,8 +206,7 @@ function App() {
   const [cost, setCost] = useState(null)
   const [matchStatus, setMatchStatus] = useState('counting')
   const [matchInfo, setMatchInfo] = useState(null)
-  const [matchDayInput, setMatchDayInput] = useState('')
-  const [matchDateInput, setMatchDateInput] = useState('')
+  const [matchDateISO, setMatchDateISO] = useState('')
   const [matchInfoSaving, setMatchInfoSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -215,8 +227,7 @@ function App() {
   const costImageRef = useRef(null)
   const [costTotalInput, setCostTotalInput] = useState('')
   const [costPlayerCountInput, setCostPlayerCountInput] = useState('')
-  const [costDayInput, setCostDayInput] = useState('')
-  const [costDateInput, setCostDateInput] = useState('')
+  const [costDateISO, setCostDateISO] = useState('')
   const [costError, setCostError] = useState('')
   const [costSaving, setCostSaving] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
@@ -508,20 +519,20 @@ function App() {
 
   // Prefill the admin edit fields once, when this week's cost doc first
   // loads — but only if the admin hasn't started typing into them yet.
+  // isoDate is only present on docs saved since the calendar-picker switch;
+  // older docs just leave the picker empty until re-saved.
   useEffect(() => {
     if (cost && costTotalInput === '' && costPlayerCountInput === '') {
       setCostTotalInput(String(cost.totalCost))
       setCostPlayerCountInput(String(cost.playerCount))
-      setCostDayInput(cost.day ?? '')
-      setCostDateInput(cost.date ?? '')
+      setCostDateISO(cost.isoDate ?? '')
     }
   }, [cost])
 
-  // Same idea for the match day/date fields.
+  // Same idea for the match date field.
   useEffect(() => {
-    if (matchInfo && matchDayInput === '' && matchDateInput === '') {
-      setMatchDayInput(matchInfo.day ?? '')
-      setMatchDateInput(matchInfo.date ?? '')
+    if (matchInfo && matchDateISO === '') {
+      setMatchDateISO(matchInfo.isoDate ?? '')
     }
   }, [matchInfo])
 
@@ -647,6 +658,10 @@ function App() {
       setCostError('Enter a number of players greater than 0.')
       return
     }
+    if (!costDateISO) {
+      setCostError('Pick a date.')
+      return
+    }
 
     const file = costImageRef.current?.files?.[0]
     let imageDataUrl = cost?.imageDataUrl ?? null
@@ -674,8 +689,8 @@ function App() {
       imageDataUrl,
       totalCost,
       playerCount,
-      day: costDayInput.trim(),
-      date: costDateInput.trim(),
+      isoDate: costDateISO,
+      ...formatDayAndDate(costDateISO),
     })
     if (costImageRef.current) costImageRef.current.value = ''
     setCostSaving(false)
@@ -683,11 +698,11 @@ function App() {
 
   async function saveMatchInfo(e) {
     e.preventDefault()
-    if (!isAdmin) return
+    if (!isAdmin || !matchDateISO) return
     setMatchInfoSaving(true)
     await setDoc(doc(db, MATCH_COLLECTION, responsesDocId), {
-      day: matchDayInput.trim(),
-      date: matchDateInput.trim(),
+      isoDate: matchDateISO,
+      ...formatDayAndDate(matchDateISO),
     })
     setMatchInfoSaving(false)
   }
@@ -1024,18 +1039,11 @@ function App() {
           {isAdmin && (
             <form className="match-info-form" onSubmit={saveMatchInfo}>
               <input
-                type="text"
-                placeholder="Day (e.g. Thursday)"
-                value={matchDayInput}
-                onChange={(e) => setMatchDayInput(e.target.value)}
+                type="date"
+                value={matchDateISO}
+                onChange={(e) => setMatchDateISO(e.target.value)}
               />
-              <input
-                type="text"
-                placeholder="Date (e.g. September 3)"
-                value={matchDateInput}
-                onChange={(e) => setMatchDateInput(e.target.value)}
-              />
-              <button type="submit" disabled={matchInfoSaving}>
+              <button type="submit" disabled={matchInfoSaving || !matchDateISO}>
                 {matchInfoSaving ? 'Saving…' : 'Save'}
               </button>
             </form>
@@ -1131,16 +1139,9 @@ function App() {
               onChange={(e) => setCostPlayerCountInput(e.target.value)}
             />
             <input
-              type="text"
-              placeholder="Day (e.g. Thursday)"
-              value={costDayInput}
-              onChange={(e) => setCostDayInput(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Date (e.g. August 27)"
-              value={costDateInput}
-              onChange={(e) => setCostDateInput(e.target.value)}
+              type="date"
+              value={costDateISO}
+              onChange={(e) => setCostDateISO(e.target.value)}
             />
             <button type="submit" disabled={costSaving}>
               {costSaving ? 'Saving…' : cost ? 'Update' : 'Save'}
