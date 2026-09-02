@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   collection,
   deleteDoc,
@@ -50,6 +50,16 @@ const RESPONSES_COLLECTION = 'responses'
 const PAID_COLLECTION = 'paid'
 const COSTS_COLLECTION = 'costs'
 const STATUS_COLLECTION = 'matchStatus'
+const MATCH_COLLECTION = 'matchInfo'
+const LAST_PLAYED_ROSTER_COLLECTION = 'lastPlayedRoster'
+// Admin now controls resets manually (no more auto-rollover on a computed
+// Thursday date), so every cycle-scoped collection lives under one fixed
+// doc id instead of a date-derived key. "Last played" is a second fixed doc
+// id in those same collections — an admin reset copies "current" into it
+// before clearing "current", so the two tabs are just two doc ids and never
+// touch each other outside that one archive step.
+const CURRENT_DOC_ID = 'current'
+const LAST_PLAYED_DOC_ID = 'lastPlayed'
 const STATUS_LABELS = {
   counting: 'Counting players',
   booked: 'Booked',
@@ -122,30 +132,8 @@ async function sha256Hex(text) {
     .join('')
 }
 
-// Always the next upcoming Thursday (today if today is Thursday) — never a
-// date that's already passed. Since this is a fresh Firestore doc key, the
-// board goes blank the moment the previous Thursday passes, well ahead of
-// the following week's game.
-function getCycleThursday() {
-  const now = new Date()
-  const day = now.getDay() // 0 = Sun ... 4 = Thu
-  const diff = (4 - day + 7) % 7
-  const thursday = new Date(now)
-  thursday.setDate(now.getDate() + diff)
-  thursday.setHours(0, 0, 0, 0)
-  return thursday
-}
-
 function isoDate(date) {
   return date.toISOString().slice(0, 10)
-}
-
-function formatDate(date) {
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  })
 }
 
 // One-time (per empty database) seed from the roster file. Safe to call on
@@ -163,15 +151,30 @@ async function ensureSeeded() {
 }
 
 function App() {
-  const thursday = useMemo(() => getCycleThursday(), [])
-  const responsesDocId = isoDate(thursday)
+  const responsesDocId = CURRENT_DOC_ID
+
+  const [activeTab, setActiveTab] = useState('current')
 
   const [players, setPlayers] = useState([])
   const [responses, setResponses] = useState({})
   const [paid, setPaid] = useState({})
   const [cost, setCost] = useState(null)
   const [matchStatus, setMatchStatus] = useState('counting')
+  const [matchInfo, setMatchInfo] = useState(null)
+  const [matchDayInput, setMatchDayInput] = useState('')
+  const [matchDateInput, setMatchDateInput] = useState('')
+  const [matchInfoSaving, setMatchInfoSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Last played: a frozen-at-archive-time mirror of the same shape, kept
+  // live-subscribed (not just loaded on tab switch) so payment moves made
+  // here while viewing this tab update immediately, same as Current.
+  const [lastPlayedRoster, setLastPlayedRoster] = useState([])
+  const [lastPlayedResponses, setLastPlayedResponses] = useState({})
+  const [lastPlayedPaid, setLastPlayedPaid] = useState({})
+  const [lastPlayedCost, setLastPlayedCost] = useState(null)
+  const [lastPlayedMatchInfo, setLastPlayedMatchInfo] = useState(null)
+  const [lastPlayedStatus, setLastPlayedStatus] = useState(null)
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
   const [addError, setAddError] = useState('')
@@ -180,9 +183,12 @@ function App() {
   const costImageRef = useRef(null)
   const [costTotalInput, setCostTotalInput] = useState('')
   const [costPlayerCountInput, setCostPlayerCountInput] = useState('')
+  const [costDayInput, setCostDayInput] = useState('')
+  const [costDateInput, setCostDateInput] = useState('')
   const [costError, setCostError] = useState('')
   const [costSaving, setCostSaving] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const [isAdmin, setIsAdmin] = useState(
     () => sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
@@ -259,6 +265,55 @@ function App() {
     return unsubscribe
   }, [responsesDocId])
 
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, MATCH_COLLECTION, responsesDocId), (snap) => {
+      setMatchInfo(snap.exists() ? snap.data() : null)
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, LAST_PLAYED_ROSTER_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedRoster(snap.exists() ? snap.data().players ?? [] : [])
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, RESPONSES_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedResponses(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, PAID_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedPaid(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, COSTS_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedCost(snap.exists() ? snap.data() : null)
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, MATCH_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedMatchInfo(snap.exists() ? snap.data() : null)
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, STATUS_COLLECTION, LAST_PLAYED_DOC_ID), (snap) => {
+      setLastPlayedStatus(snap.exists() ? snap.data().status : null)
+    })
+    return unsubscribe
+  }, [])
+
   // Fires synchronously after responses/paid change and the board has
   // re-rendered rows into their new columns, but before the browser paints
   // (useLayoutEffect, not useEffect) — so the real destination row can be
@@ -274,7 +329,7 @@ function App() {
       if (!el) continue
       animateCardArc(flight, el)
     }
-  }, [responses, paid])
+  }, [responses, paid, lastPlayedResponses, lastPlayedPaid])
 
   function animateCardArc(flight, toEl) {
     const layer = ballLayerRef.current
@@ -425,8 +480,18 @@ function App() {
     if (cost && costTotalInput === '' && costPlayerCountInput === '') {
       setCostTotalInput(String(cost.totalCost))
       setCostPlayerCountInput(String(cost.playerCount))
+      setCostDayInput(cost.day ?? '')
+      setCostDateInput(cost.date ?? '')
     }
   }, [cost])
+
+  // Same idea for the match day/date fields.
+  useEffect(() => {
+    if (matchInfo && matchDayInput === '' && matchDateInput === '') {
+      setMatchDayInput(matchInfo.day ?? '')
+      setMatchDateInput(matchInfo.date ?? '')
+    }
+  }, [matchInfo])
 
   async function addPlayer(e) {
     e.preventDefault()
@@ -484,29 +549,50 @@ function App() {
     setIsAdmin(false)
   }
 
-  function setResponse(id, value) {
-    setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: value }, { merge: true })
-    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  function setResponse(id, value, docId) {
+    setDoc(doc(db, RESPONSES_COLLECTION, docId), { [id]: value }, { merge: true })
+    setDoc(doc(db, PAID_COLLECTION, docId), { [id]: deleteField() }, { merge: true })
   }
 
-  function clearResponse(id) {
-    setDoc(doc(db, RESPONSES_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
-    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  function clearResponse(id, docId) {
+    setDoc(doc(db, RESPONSES_COLLECTION, docId), { [id]: deleteField() }, { merge: true })
+    setDoc(doc(db, PAID_COLLECTION, docId), { [id]: deleteField() }, { merge: true })
   }
 
-  function markPaid(id) {
-    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: true }, { merge: true })
+  function markPaid(id, docId) {
+    setDoc(doc(db, PAID_COLLECTION, docId), { [id]: true }, { merge: true })
   }
 
-  function unpay(id) {
-    setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  function unpay(id, docId) {
+    setDoc(doc(db, PAID_COLLECTION, docId), { [id]: deleteField() }, { merge: true })
   }
 
-  async function resetAll() {
+  function requestReset() {
     if (!isAdmin) return
-    if (!confirm('Move every player back to Pending? This clears In/Out/Paid for this week.')) return
+    setShowResetConfirm(true)
+  }
+
+  // Archive whatever Current holds right now into Last Played, then clear
+  // Current — so Last Played always reflects the state right before the
+  // most recent reset, independent of anything done to it afterwards.
+  async function confirmReset() {
+    await Promise.all([
+      setDoc(doc(db, RESPONSES_COLLECTION, LAST_PLAYED_DOC_ID), responses),
+      setDoc(doc(db, PAID_COLLECTION, LAST_PLAYED_DOC_ID), paid),
+      setDoc(doc(db, LAST_PLAYED_ROSTER_COLLECTION, LAST_PLAYED_DOC_ID), {
+        players: players.map((p) => ({ id: p.id, name: p.name })),
+      }),
+      cost
+        ? setDoc(doc(db, COSTS_COLLECTION, LAST_PLAYED_DOC_ID), cost)
+        : deleteDoc(doc(db, COSTS_COLLECTION, LAST_PLAYED_DOC_ID)),
+      matchInfo
+        ? setDoc(doc(db, MATCH_COLLECTION, LAST_PLAYED_DOC_ID), matchInfo)
+        : deleteDoc(doc(db, MATCH_COLLECTION, LAST_PLAYED_DOC_ID)),
+      setDoc(doc(db, STATUS_COLLECTION, LAST_PLAYED_DOC_ID), { status: matchStatus }),
+    ])
     await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
+    setShowResetConfirm(false)
   }
 
   async function setStatus(status) {
@@ -552,17 +638,37 @@ function App() {
     }
 
     setCostSaving(true)
-    await setDoc(doc(db, COSTS_COLLECTION, responsesDocId), { imageDataUrl, totalCost, playerCount })
+    await setDoc(doc(db, COSTS_COLLECTION, responsesDocId), {
+      imageDataUrl,
+      totalCost,
+      playerCount,
+      day: costDayInput.trim(),
+      date: costDateInput.trim(),
+    })
     if (costImageRef.current) costImageRef.current.value = ''
     setCostSaving(false)
   }
 
+  async function saveMatchInfo(e) {
+    e.preventDefault()
+    if (!isAdmin) return
+    setMatchInfoSaving(true)
+    await setDoc(doc(db, MATCH_COLLECTION, responsesDocId), {
+      day: matchDayInput.trim(),
+      date: matchDateInput.trim(),
+    })
+    setMatchInfoSaving(false)
+  }
+
+  // Which doc id a move writes to depends only on which tab is open —
+  // Last Played moves never touch Current's docs and vice versa.
+  const activeDocId = activeTab === 'current' ? CURRENT_DOC_ID : LAST_PLAYED_DOC_ID
   const MOVE_ACTIONS = {
-    in: (id) => setResponse(id, 'yes'),
-    out: (id) => setResponse(id, 'no'),
-    undo: (id) => clearResponse(id),
-    pay: (id) => markPaid(id),
-    unpay: (id) => unpay(id),
+    in: (id) => setResponse(id, 'yes', activeDocId),
+    out: (id) => setResponse(id, 'no', activeDocId),
+    undo: (id) => clearResponse(id, activeDocId),
+    pay: (id) => markPaid(id, activeDocId),
+    unpay: (id) => unpay(id, activeDocId),
   }
 
   // Grabs the row's current position and a visual clone before the move
@@ -651,14 +757,20 @@ function App() {
     }
   }
 
-  const visiblePlayers = players.filter((p) =>
+  const displayPlayers = activeTab === 'current' ? players : lastPlayedRoster
+  const displayResponses = activeTab === 'current' ? responses : lastPlayedResponses
+  const displayPaid = activeTab === 'current' ? paid : lastPlayedPaid
+  const displayCost = activeTab === 'current' ? cost : lastPlayedCost
+  const displayStatus = activeTab === 'current' ? matchStatus : lastPlayedStatus
+
+  const visiblePlayers = displayPlayers.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   )
-  const pendingPlayers = visiblePlayers.filter((p) => !responses[p.id])
-  const confirmedPlayers = visiblePlayers.filter((p) => responses[p.id] === 'yes')
-  const inPlayers = confirmedPlayers.filter((p) => !paid[p.id])
-  const outPlayers = visiblePlayers.filter((p) => responses[p.id] === 'no')
-  const paidPlayers = confirmedPlayers.filter((p) => paid[p.id])
+  const pendingPlayers = visiblePlayers.filter((p) => !displayResponses[p.id])
+  const confirmedPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'yes')
+  const inPlayers = confirmedPlayers.filter((p) => !displayPaid[p.id])
+  const outPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'no')
+  const paidPlayers = confirmedPlayers.filter((p) => displayPaid[p.id])
 
   function renderVerifyForm(p) {
     return (
@@ -682,7 +794,7 @@ function App() {
   }
 
   function renderRow(p) {
-    const status = responses[p.id]
+    const status = displayResponses[p.id]
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
     return (
@@ -723,7 +835,7 @@ function App() {
                 ↺
               </button>
             )}
-            {isAdmin && (
+            {isAdmin && activeTab === 'current' && (
               <button
                 type="button"
                 className="remove"
@@ -759,7 +871,7 @@ function App() {
             >
               ↺
             </button>
-            {isAdmin && (
+            {isAdmin && activeTab === 'current' && (
               <button
                 type="button"
                 className="remove"
@@ -782,7 +894,7 @@ function App() {
         {isAdmin ? (
           <>
             <span className="admin-badge">Admin mode</span>
-            <button type="button" className="link-btn reset-all" onClick={resetAll}>
+            <button type="button" className="link-btn reset-all" onClick={requestReset}>
               Reset all to Pending
             </button>
             <button type="button" className="link-btn" onClick={logout}>
@@ -819,17 +931,72 @@ function App() {
         )}
       </div>
 
-      <header className="header">
-        <h1>Thursday Players</h1>
-        <p className="subtitle">Who's in for {formatDate(thursday)}?</p>
-      </header>
+      <div className="tabs">
+        <button
+          type="button"
+          className={`tab ${activeTab === 'current' ? 'active' : ''}`}
+          onClick={() => setActiveTab('current')}
+        >
+          Current
+        </button>
+        <button
+          type="button"
+          className={`tab ${activeTab === 'last' ? 'active' : ''}`}
+          onClick={() => setActiveTab('last')}
+        >
+          Last played
+        </button>
+      </div>
+
+      {activeTab === 'current' ? (
+        <header className="header">
+          <h1>Office Futsal</h1>
+          <p className="subtitle subtitle-hero">
+            {matchInfo?.day && matchInfo?.date
+              ? `Who's in for ${matchInfo.day}, ${matchInfo.date}?`
+              : "Who's in?"}
+          </p>
+          {isAdmin && (
+            <form className="match-info-form" onSubmit={saveMatchInfo}>
+              <input
+                type="text"
+                placeholder="Day (e.g. Thursday)"
+                value={matchDayInput}
+                onChange={(e) => setMatchDayInput(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Date (e.g. September 3)"
+                value={matchDateInput}
+                onChange={(e) => setMatchDateInput(e.target.value)}
+              />
+              <button type="submit" disabled={matchInfoSaving}>
+                {matchInfoSaving ? 'Saving…' : 'Save'}
+              </button>
+            </form>
+          )}
+        </header>
+      ) : (
+        <header className="header">
+          <h1>Office Futsal</h1>
+          <p className="subtitle">
+            {lastPlayedMatchInfo?.day && lastPlayedMatchInfo?.date
+              ? `Last played: ${lastPlayedMatchInfo.day}, ${lastPlayedMatchInfo.date}`
+              : 'No archived match yet.'}
+          </p>
+        </header>
+      )}
 
       <div className="top-panels">
-        {cost && (
+        {displayCost && (
           <section className="cost-banner">
-            <h2 className="cost-banner-title">Last week's payment to:</h2>
+            <h2 className="cost-banner-title">
+              {displayCost.day && displayCost.date
+                ? `Payment for ${displayCost.day}, ${displayCost.date}`
+                : 'Payment for'}
+            </h2>
             <img
-              src={cost.imageDataUrl}
+              src={displayCost.imageDataUrl}
               alt="Cost receipt"
               className="cost-thumb"
               onClick={() => setImageExpanded(true)}
@@ -837,28 +1004,47 @@ function App() {
             <div className="cost-details">
               <div className="cost-row">
                 <span>Total cost</span>
-                <strong>{formatMoney(cost.totalCost)}</strong>
+                <strong>{formatMoney(displayCost.totalCost)}</strong>
               </div>
               <div className="cost-row">
                 <span>Players</span>
-                <strong>{cost.playerCount}</strong>
+                <strong>{displayCost.playerCount}</strong>
               </div>
               <div className="cost-share">
                 <span>Each's share</span>
-                <strong>{formatMoney(cost.totalCost / cost.playerCount)}</strong>
+                <strong>{formatMoney(displayCost.totalCost / displayCost.playerCount)}</strong>
               </div>
             </div>
           </section>
         )}
       </div>
 
-      {imageExpanded && cost && (
+      {imageExpanded && displayCost && (
         <div className="lightbox" onClick={() => setImageExpanded(false)}>
-          <img src={cost.imageDataUrl} alt="Cost receipt, full size" />
+          <img src={displayCost.imageDataUrl} alt="Cost receipt, full size" />
         </div>
       )}
 
-      {isAdmin && (
+      {showResetConfirm && (
+        <div className="lightbox" onClick={() => setShowResetConfirm(false)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <p>
+              Move every player back to Pending? This week's roster, payment info, and images will
+              be saved to "Last played" first, then In/Out/Paid will be cleared for the new week.
+            </p>
+            <div className="confirm-modal-actions">
+              <button type="button" className="confirm-cancel" onClick={() => setShowResetConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="confirm-danger" onClick={confirmReset}>
+                Reset all
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && activeTab === 'current' && (
         <form className="cost-form" onSubmit={saveCost}>
           <h3 className="cost-form-title">Cost breakdown</h3>
           <div className="cost-form-row">
@@ -879,6 +1065,18 @@ function App() {
               value={costPlayerCountInput}
               onChange={(e) => setCostPlayerCountInput(e.target.value)}
             />
+            <input
+              type="text"
+              placeholder="Day (e.g. Thursday)"
+              value={costDayInput}
+              onChange={(e) => setCostDayInput(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Date (e.g. August 27)"
+              value={costDateInput}
+              onChange={(e) => setCostDateInput(e.target.value)}
+            />
             <button type="submit" disabled={costSaving}>
               {costSaving ? 'Saving…' : cost ? 'Update' : 'Save'}
             </button>
@@ -887,7 +1085,7 @@ function App() {
         </form>
       )}
 
-      {isAdmin && (
+      {isAdmin && activeTab === 'current' && (
         <form className="add-form" onSubmit={addPlayer}>
           <input
             type="text"
@@ -909,7 +1107,7 @@ function App() {
       )}
 
       <div className="search-row">
-        {players.length > 0 && (
+        {displayPlayers.length > 0 && (
           <input
             type="search"
             className="search-input"
@@ -918,30 +1116,34 @@ function App() {
             onChange={(e) => setSearch(e.target.value)}
           />
         )}
-        <div className="status-inline">
-          <span className="status-inline-title">Futsal Status:</span>
-          <span className={`status-badge status-${matchStatus}`}>{STATUS_LABELS[matchStatus]}</span>
-          {isAdmin && (
-            <div className="status-admin-actions">
-              {Object.keys(STATUS_LABELS).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
-                  onClick={() => setStatus(key)}
-                >
-                  {STATUS_LABELS[key]}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {displayStatus && (
+          <div className="status-inline">
+            <span className="status-inline-title">Futsal Status:</span>
+            <span className={`status-badge status-${displayStatus}`}>{STATUS_LABELS[displayStatus]}</span>
+            {isAdmin && activeTab === 'current' && (
+              <div className="status-admin-actions">
+                {Object.keys(STATUS_LABELS).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
+                    onClick={() => setStatus(key)}
+                  >
+                    {STATUS_LABELS[key]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {loading ? (
+      {activeTab === 'current' && loading ? (
         <p className="empty">Loading players…</p>
-      ) : players.length === 0 ? (
-        <p className="empty">No players yet. Add one above.</p>
+      ) : displayPlayers.length === 0 ? (
+        <p className="empty">
+          {activeTab === 'current' ? 'No players yet. Add one above.' : 'No match played yet.'}
+        </p>
       ) : visiblePlayers.length === 0 ? (
         <p className="empty">No players match "{search}".</p>
       ) : (

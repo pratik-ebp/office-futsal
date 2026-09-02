@@ -75,9 +75,121 @@
   color: #dc2626;
 }
 
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
 .subtitle {
   color: var(--text);
   margin-top: 4px;
+}
+
+.subtitle-hero {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .subtitle-hero {
+    font-size: 18px;
+  }
+}
+
+.match-info-form {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.match-info-form input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+  width: 160px;
+}
+
+.match-info-form button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-modal {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 24px;
+  max-width: 380px;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.confirm-modal p {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 15px;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirm-modal-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-cancel {
+  background: var(--code-bg);
+  color: var(--text-h);
+  border: 1px solid var(--border) !important;
+}
+
+.confirm-danger {
+  background: #dc2626;
+  color: #fff;
 }
 
 .top-panels {
@@ -249,7 +361,8 @@
   align-items: center;
 }
 
-.cost-form-row input[type='number'] {
+.cost-form-row input[type='number'],
+.cost-form-row input[type='text'] {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
