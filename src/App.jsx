@@ -1109,7 +1109,7 @@ function App() {
                     costPaidCount >= displayCost.playerCount ? 'complete' : 'pending'
                   }`}
                 >
-                  <span>Payments</span>
+                  <span>Payments collected</span>
                   <strong>
                     {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
                     {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
