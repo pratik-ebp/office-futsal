@@ -1084,35 +1084,37 @@ function App() {
                 ? `Payment for ${displayCost.day}, ${displayCost.date}`
                 : 'Payment for'}
             </h2>
-            <img
-              src={displayCost.imageDataUrl}
-              alt="Cost receipt"
-              className="cost-thumb"
-              onClick={() => setImageExpanded(true)}
-            />
-            <div className="cost-details">
-              <div className="cost-row">
-                <span>Total cost</span>
-                <strong>{formatMoney(displayCost.totalCost)}</strong>
-              </div>
-              <div className="cost-row">
-                <span>Players</span>
-                <strong>{displayCost.playerCount}</strong>
-              </div>
-              <div className="cost-share">
-                <span>Each's share</span>
-                <strong>{formatMoney(displayCost.totalCost / displayCost.playerCount)}</strong>
-              </div>
-              <div
-                className={`cost-share cost-payments ${
-                  costPaidCount >= displayCost.playerCount ? 'complete' : 'pending'
-                }`}
-              >
-                <span>Payments</span>
-                <strong>
-                  {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
-                  {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
-                </strong>
+            <div className="cost-body">
+              <img
+                src={displayCost.imageDataUrl}
+                alt="Cost receipt"
+                className="cost-thumb"
+                onClick={() => setImageExpanded(true)}
+              />
+              <div className="cost-details">
+                <div className="cost-row">
+                  <span>Total cost</span>
+                  <strong>{formatMoney(displayCost.totalCost)}</strong>
+                </div>
+                <div className="cost-row">
+                  <span>Players</span>
+                  <strong>{displayCost.playerCount}</strong>
+                </div>
+                <div className="cost-share">
+                  <span>Each's share</span>
+                  <strong>{formatMoney(displayCost.totalCost / displayCost.playerCount)}</strong>
+                </div>
+                <div
+                  className={`cost-share cost-payments ${
+                    costPaidCount >= displayCost.playerCount ? 'complete' : 'pending'
+                  }`}
+                >
+                  <span>Payments</span>
+                  <strong>
+                    {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
+                    {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
+                  </strong>
+                </div>
               </div>
             </div>
           </section>
