@@ -825,6 +825,22 @@ function App() {
   const outPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => displayPaid[p.id])
 
+  // Cost banner on the Current tab keeps showing last week's receipt until
+  // admin uploads a new one after reset — reset already zeroed out `paid`
+  // for the new week, so counting from it here would wrongly show Rs. 0
+  // against a receipt that was actually for last week. When the banner's
+  // date still matches Last played's, count from the Last played roster
+  // instead.
+  const costIsFromLastPlayed =
+    activeTab === 'current' &&
+    displayCost &&
+    lastPlayedCost &&
+    displayCost.day === lastPlayedCost.day &&
+    displayCost.date === lastPlayedCost.date
+  const costPaidCount = costIsFromLastPlayed
+    ? lastPlayedRoster.filter((p) => lastPlayedPaid[p.id]).length
+    : paidPlayers.length
+
   // Only Pending — a player who has moved to In/Out/Paid has, by
   // definition, moved. Last played rows share this shape but never carry
   // lastMovedAt, so daysSinceMoved is naturally null there and no warning
@@ -1089,13 +1105,13 @@ function App() {
               </div>
               <div
                 className={`cost-share cost-payments ${
-                  paidPlayers.length >= displayCost.playerCount ? 'complete' : 'pending'
+                  costPaidCount >= displayCost.playerCount ? 'complete' : 'pending'
                 }`}
               >
                 <span>Payments</span>
                 <strong>
-                  {paidPlayers.length} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
-                  {formatMoney((displayCost.totalCost / displayCost.playerCount) * paidPlayers.length)}
+                  {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
+                  {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
                 </strong>
               </div>
             </div>
