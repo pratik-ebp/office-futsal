@@ -1087,6 +1087,17 @@ function App() {
                 <span>Each's share</span>
                 <strong>{formatMoney(displayCost.totalCost / displayCost.playerCount)}</strong>
               </div>
+              <div
+                className={`cost-share cost-payments ${
+                  paidPlayers.length >= displayCost.playerCount ? 'complete' : 'pending'
+                }`}
+              >
+                <span>Payments</span>
+                <strong>
+                  {paidPlayers.length} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
+                  {formatMoney((displayCost.totalCost / displayCost.playerCount) * paidPlayers.length)}
+                </strong>
+              </div>
             </div>
           </section>
         )}

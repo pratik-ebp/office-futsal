@@ -322,6 +322,14 @@
   color: var(--accent);
 }
 
+.cost-payments.pending strong {
+  color: #eab308;
+}
+
+.cost-payments.complete strong {
+  color: #22c55e;
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
