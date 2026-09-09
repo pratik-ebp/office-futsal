@@ -222,6 +222,8 @@ function App() {
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
   const [addError, setAddError] = useState('')
+  const [guestName, setGuestName] = useState('')
+  const [guestError, setGuestError] = useState('')
   const [search, setSearch] = useState('')
 
   const costImageRef = useRef(null)
@@ -553,6 +555,26 @@ function App() {
     setNewName('')
     setNewCode('')
     setAddError('')
+  }
+
+  // A walk-in who filled in for the last match but was never part of the
+  // main roster. Goes straight into the Last played roster only — never
+  // PLAYERS_COLLECTION — so they never show up as Pending on Current.
+  async function addGuestToLastPlayed(e) {
+    e.preventDefault()
+    if (!isAdmin) return
+    const name = guestName.trim()
+    if (!name) return
+    const id = slugify(name) || crypto.randomUUID()
+    if (lastPlayedRoster.some((p) => p.id === id)) {
+      setGuestError('Already in Last played.')
+      return
+    }
+    await setDoc(doc(db, LAST_PLAYED_ROSTER_COLLECTION, LAST_PLAYED_DOC_ID), {
+      players: [...lastPlayedRoster, { id, name }],
+    })
+    setGuestName('')
+    setGuestError('')
   }
 
   async function removePlayer(player) {
@@ -1198,6 +1220,19 @@ function App() {
           />
           <button type="submit">Add</button>
           {addError && <span className="login-error">{addError}</span>}
+        </form>
+      )}
+
+      {isAdmin && activeTab === 'last' && (
+        <form className="add-form" onSubmit={addGuestToLastPlayed}>
+          <input
+            type="text"
+            placeholder="Add a guest to Last played"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+          />
+          <button type="submit">Add</button>
+          {guestError && <span className="login-error">{guestError}</span>}
         </form>
       )}
 
