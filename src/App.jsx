@@ -1235,8 +1235,14 @@ function App() {
                 >
                   <span>Payments collected</span>
                   <strong>
-                    {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
-                    {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
+                    {costPaidCount >= displayCost.playerCount ? (
+                      'Fully Paid'
+                    ) : (
+                      <>
+                        {costPaidCount} &times; {formatMoney(displayCost.totalCost / displayCost.playerCount)} ={' '}
+                        {formatMoney((displayCost.totalCost / displayCost.playerCount) * costPaidCount)}
+                      </>
+                    )}
                   </strong>
                 </div>
               </div>
