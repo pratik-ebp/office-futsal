@@ -253,6 +253,12 @@ function App() {
   // silent time with no prompt and no move yet. Track it so the row can
   // show something instead of looking hung.
   const [checkingId, setCheckingId] = useState(null)
+  // Admin editing a player's name/code inline on their card — one row at a
+  // time, same pattern as the verify prompt above.
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editCode, setEditCode] = useState('')
+  const [editError, setEditError] = useState('')
 
   // Ball-arc move animation: rowRefs tracks every currently-mounted row DOM
   // node by player id (across all four columns) so we can grab its rect
@@ -591,6 +597,40 @@ function App() {
     await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
+  function startEdit(player) {
+    if (!isAdmin) return
+    setEditingId(player.id)
+    setEditName(player.name)
+    setEditCode('')
+    setEditError('')
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditName('')
+    setEditCode('')
+    setEditError('')
+  }
+
+  async function saveEdit(player) {
+    if (!isAdmin) return
+    const name = editName.trim()
+    if (!name) {
+      setEditError('Name required.')
+      return
+    }
+    if (editCode && !/^\d{4}$/.test(editCode)) {
+      setEditError('Code must be exactly 4 digits.')
+      return
+    }
+    await setDoc(doc(db, PLAYERS_COLLECTION, player.id), { name }, { merge: true })
+    if (editCode) {
+      const codeHash = await sha256Hex(editCode)
+      await setDoc(doc(db, CODES_COLLECTION, player.id), { codeHash })
+    }
+    cancelEdit()
+  }
+
   async function submitLogin(e) {
     e.preventDefault()
     if (!ADMIN_PASSWORD_HASH) {
@@ -909,15 +949,54 @@ function App() {
     )
   }
 
+  function renderEditForm(p) {
+    return (
+      <form
+        className="edit-form"
+        onSubmit={(e) => {
+          e.preventDefault()
+          saveEdit(p)
+        }}
+      >
+        <input
+          type="text"
+          className="edit-name-input"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && cancelEdit()}
+          autoFocus
+        />
+        <input
+          type="text"
+          inputMode="numeric"
+          className="edit-code-input"
+          placeholder="New code"
+          value={editCode}
+          onChange={(e) => setEditCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+        />
+        <button type="submit" className="link-btn">
+          Save
+        </button>
+        <button type="button" className="link-btn" aria-label="Cancel" onClick={cancelEdit}>
+          ×
+        </button>
+        {editError && <span className="code-error">{editError}</span>}
+      </form>
+    )
+  }
+
   function renderRow(p) {
     const status = displayResponses[p.id]
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
+    const isEditing = editingId === p.id
     return (
       <li key={p.id} ref={setRowRef(p.id)} className={rowClassName(p)}>
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
+        ) : isEditing ? (
+          renderEditForm(p)
         ) : isVerifying ? (
           renderVerifyForm(p)
         ) : (
@@ -954,6 +1033,16 @@ function App() {
             {isAdmin && activeTab === 'current' && (
               <button
                 type="button"
+                className="edit"
+                aria-label={`Edit ${p.name}`}
+                onClick={() => startEdit(p)}
+              >
+                Edit
+              </button>
+            )}
+            {isAdmin && activeTab === 'current' && (
+              <button
+                type="button"
                 className="remove"
                 aria-label={`Remove ${p.name}`}
                 onClick={() => removePlayer(p)}
@@ -971,11 +1060,14 @@ function App() {
   function renderPaidRow(p) {
     const isVerifying = verifyingId === p.id
     const isChecking = checkingId === p.id
+    const isEditing = editingId === p.id
     return (
       <li key={p.id} ref={setRowRef(p.id)} className={rowClassName(p)}>
         <span className="player-name">{p.name}</span>
         {isChecking ? (
           <span className="checking">Checking…</span>
+        ) : isEditing ? (
+          renderEditForm(p)
         ) : isVerifying ? (
           renderVerifyForm(p)
         ) : (
@@ -988,6 +1080,16 @@ function App() {
             >
               ↺
             </button>
+            {isAdmin && activeTab === 'current' && (
+              <button
+                type="button"
+                className="edit"
+                aria-label={`Edit ${p.name}`}
+                onClick={() => startEdit(p)}
+              >
+                Edit
+              </button>
+            )}
             {isAdmin && activeTab === 'current' && (
               <button
                 type="button"

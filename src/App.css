@@ -806,3 +806,52 @@
 .remove:hover {
   color: #dc2626;
 }
+
+.edit {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 5px 10px;
+}
+
+.edit:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.edit-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+  flex-wrap: wrap;
+}
+
+.edit-name-input {
+  flex: 1;
+  min-width: 100px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
+}
+
+.edit-code-input {
+  flex: 0 0 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
