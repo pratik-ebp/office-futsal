@@ -58,5 +58,9 @@ service cloud.firestore {
     match /removedPlayers/{playerId} {
       allow read, write: if true;
     }
+    // Per-player column-move history for the current cycle; wiped on reset.
+    match /movements/{cycleId} {
+      allow read, write: if true;
+    }
   }
 }

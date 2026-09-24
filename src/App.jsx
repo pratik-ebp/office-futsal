@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -56,6 +57,9 @@ const LAST_PLAYED_ROSTER_COLLECTION = 'lastPlayedRoster'
 // One doc per admin-deleted player id, so the seed roster never brings them
 // back (the roster file itself can't be edited from the browser).
 const REMOVED_PLAYERS_COLLECTION = 'removedPlayers'
+// Per-player list of column moves for the current cycle ({from, to, at}),
+// one doc keyed by cycle id. Wiped on reset, never archived to Last played.
+const MOVEMENTS_COLLECTION = 'movements'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
 // doc id instead of a date-derived key. "Last played" is a second fixed doc
@@ -219,6 +223,8 @@ function App() {
   // Last played: a frozen-at-archive-time mirror of the same shape, kept
   // live-subscribed (not just loaded on tab switch) so payment moves made
   // here while viewing this tab update immediately, same as Current.
+  const [movements, setMovements] = useState({})
+  const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [lastPlayedRoster, setLastPlayedRoster] = useState([])
   const [lastPlayedResponses, setLastPlayedResponses] = useState({})
   const [lastPlayedPaid, setLastPlayedPaid] = useState({})
@@ -297,6 +303,13 @@ function App() {
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, RESPONSES_COLLECTION, responsesDocId), (snap) => {
       setResponses(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, MOVEMENTS_COLLECTION, responsesDocId), (snap) => {
+      setMovements(snap.exists() ? snap.data() : {})
     })
     return unsubscribe
   }, [responsesDocId])
@@ -600,6 +613,7 @@ function App() {
       { merge: true },
     )
     await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+    await setDoc(doc(db, MOVEMENTS_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
   async function removePlayer(player) {
@@ -742,6 +756,8 @@ function App() {
     ])
     await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
+    await deleteDoc(doc(db, MOVEMENTS_COLLECTION, responsesDocId))
+    setExpandedIds(new Set())
     setShowResetConfirm(false)
   }
 
@@ -825,6 +841,69 @@ function App() {
     unpay: (id) => unpay(id, activeDocId),
   }
 
+  // Which column a player is in right now, and which one each action lands
+  // them in — used to log "from → to" for the show-more history.
+  const MOVE_TARGET = { in: 'In', out: 'Out', undo: 'Pending', pay: 'Paid', unpay: 'In' }
+  function columnOf(id) {
+    const r = displayResponses[id]
+    if (!r) return 'Pending'
+    if (r === 'no') return 'Out'
+    return displayPaid[id] ? 'Paid' : 'In'
+  }
+
+  function toggleExpanded(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function renderHistory(p) {
+    if (activeTab !== 'current' || !expandedIds.has(p.id)) return null
+    const list = movements[p.id] ?? []
+    return (
+      <ul className="move-history">
+        {list.length === 0 ? (
+          <li className="move-history-empty">No movement yet.</li>
+        ) : (
+          list.map((m, i) => (
+            <li key={i}>
+              <span className="move-path">
+                {m.from} <span aria-hidden="true">→</span> {m.to}
+              </span>
+              <span className="move-time">
+                {new Date(m.at).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </span>
+            </li>
+          ))
+        )}
+      </ul>
+    )
+  }
+
+  function renderMoreButton(p) {
+    if (activeTab !== 'current') return null
+    const open = expandedIds.has(p.id)
+    return (
+      <button
+        type="button"
+        className={`more-btn ${open ? 'open' : ''}`}
+        aria-label={`${open ? 'Hide' : 'Show'} movement for ${p.name}`}
+        aria-expanded={open}
+        onClick={() => toggleExpanded(p.id)}
+      >
+        ▾
+      </button>
+    )
+  }
+
   // Grabs the row's current position and a visual clone before the move
   // actually runs, so the card-arc effect (above) has a "from" snapshot to
   // fly from once the real row lands in its new column.
@@ -833,7 +912,16 @@ function App() {
     if (el) {
       flightsRef.current.set(id, { rect: el.getBoundingClientRect(), node: el.cloneNode(true) })
     }
+    const from = columnOf(id)
     MOVE_ACTIONS[action](id)
+    const to = MOVE_TARGET[action]
+    if (activeDocId === CURRENT_DOC_ID && from !== to) {
+      setDoc(
+        doc(db, MOVEMENTS_COLLECTION, CURRENT_DOC_ID),
+        { [id]: arrayUnion({ from, to, at: Date.now() }) },
+        { merge: true },
+      )
+    }
     // Only actions on the live roster count toward the inactivity clock —
     // correcting a Last played record (activeDocId === LAST_PLAYED_DOC_ID)
     // is historical bookkeeping, not the player showing up this week.
@@ -1108,9 +1196,11 @@ function App() {
                 ×
               </button>
             )}
+            {renderMoreButton(p)}
           </div>
         )}
         {renderStaleWarning(p)}
+        {renderHistory(p)}
       </li>
     )
   }
@@ -1168,9 +1258,11 @@ function App() {
                 ×
               </button>
             )}
+            {renderMoreButton(p)}
           </div>
         )}
         {renderStaleWarning(p)}
+        {renderHistory(p)}
       </li>
     )
   }

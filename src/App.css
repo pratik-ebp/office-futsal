@@ -855,3 +855,46 @@
   font-size: 14px;
   letter-spacing: 2px;
 }
+
+.more-btn {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.more-btn.open {
+  transform: rotate(180deg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.move-history {
+  flex-basis: 100%;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.move-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-h);
+}
+
+.move-history .move-time,
+.move-history-empty {
+  color: var(--text);
+}
