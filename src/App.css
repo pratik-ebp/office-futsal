@@ -898,3 +898,30 @@
 .move-history-empty {
   color: var(--text);
 }
+
+.player-row.nudged {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8, 0 0 12px rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.nudge-note {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.nudge-btn.active {
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+.nudge-all {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}

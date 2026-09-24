@@ -60,6 +60,9 @@ const REMOVED_PLAYERS_COLLECTION = 'removedPlayers'
 // Per-player list of column moves for the current cycle ({from, to, at}),
 // one doc keyed by cycle id. Wiped on reset, never archived to Last played.
 const MOVEMENTS_COLLECTION = 'movements'
+// Admin "are you joining?" nudges for Pending players this cycle: one doc,
+// {playerId: nudgedAtMs}. Cleared when the player responds and on reset.
+const NUDGES_COLLECTION = 'nudges'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
 // doc id instead of a date-derived key. "Last played" is a second fixed doc
@@ -224,6 +227,7 @@ function App() {
   // live-subscribed (not just loaded on tab switch) so payment moves made
   // here while viewing this tab update immediately, same as Current.
   const [movements, setMovements] = useState({})
+  const [nudges, setNudges] = useState({})
   const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [lastPlayedRoster, setLastPlayedRoster] = useState([])
   const [lastPlayedResponses, setLastPlayedResponses] = useState({})
@@ -303,6 +307,13 @@ function App() {
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, RESPONSES_COLLECTION, responsesDocId), (snap) => {
       setResponses(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [responsesDocId])
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, NUDGES_COLLECTION, responsesDocId), (snap) => {
+      setNudges(snap.exists() ? snap.data() : {})
     })
     return unsubscribe
   }, [responsesDocId])
@@ -614,6 +625,7 @@ function App() {
     )
     await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
     await setDoc(doc(db, MOVEMENTS_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+    await setDoc(doc(db, NUDGES_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
   }
 
   async function removePlayer(player) {
@@ -644,6 +656,32 @@ function App() {
     }
     expired.forEach(deletePlayerData)
   }, [isAdmin, loading, players, responses])
+
+  // Nudge: highlights a Pending card with "Are you joining this week?" until
+  // the player responds, the admin removes it, or the week is reset.
+  async function toggleNudge(player) {
+    if (!isAdmin) return
+    await setDoc(
+      doc(db, NUDGES_COLLECTION, CURRENT_DOC_ID),
+      { [player.id]: nudges[player.id] ? deleteField() : Date.now() },
+      { merge: true },
+    )
+  }
+
+  async function nudgeAllPending() {
+    if (!isAdmin) return
+    const now = Date.now()
+    const entries = Object.fromEntries(
+      players.filter((p) => !responses[p.id]).map((p) => [p.id, nudges[p.id] ?? now]),
+    )
+    if (Object.keys(entries).length === 0) return
+    await setDoc(doc(db, NUDGES_COLLECTION, CURRENT_DOC_ID), entries, { merge: true })
+  }
+
+  async function clearAllNudges() {
+    if (!isAdmin) return
+    await deleteDoc(doc(db, NUDGES_COLLECTION, CURRENT_DOC_ID))
+  }
 
   // Admin flag: shows the "account will be removed in 2 weeks" notice on the
   // card regardless of column, until unflagged.
@@ -757,6 +795,7 @@ function App() {
     await deleteDoc(doc(db, RESPONSES_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, PAID_COLLECTION, responsesDocId))
     await deleteDoc(doc(db, MOVEMENTS_COLLECTION, responsesDocId))
+    await deleteDoc(doc(db, NUDGES_COLLECTION, responsesDocId))
     setExpandedIds(new Set())
     setShowResetConfirm(false)
   }
@@ -915,6 +954,9 @@ function App() {
     const from = columnOf(id)
     MOVE_ACTIONS[action](id)
     const to = MOVE_TARGET[action]
+    if (activeDocId === CURRENT_DOC_ID && nudges[id]) {
+      setDoc(doc(db, NUDGES_COLLECTION, CURRENT_DOC_ID), { [id]: deleteField() }, { merge: true })
+    }
     if (activeDocId === CURRENT_DOC_ID && from !== to) {
       setDoc(
         doc(db, MOVEMENTS_COLLECTION, CURRENT_DOC_ID),
@@ -1046,8 +1088,18 @@ function App() {
     return days !== null && days >= INACTIVITY_WARNING_DAYS
   }
 
+  // Nudges only apply to Pending players on the live roster.
+  function isNudged(p) {
+    return activeTab === 'current' && !displayResponses[p.id] && !!nudges[p.id]
+  }
+
   function rowClassName(p) {
-    return `player-row${p.flagged || isStalePending(p) ? ' stale' : ''}`
+    return `player-row${p.flagged || isStalePending(p) ? ' stale' : ''}${isNudged(p) ? ' nudged' : ''}`
+  }
+
+  function renderNudge(p) {
+    if (!isNudged(p)) return null
+    return <p className="nudge-note">👋 Are you joining this week?</p>
   }
 
   function renderStaleWarning(p) {
@@ -1166,6 +1218,16 @@ function App() {
                 ↺
               </button>
             )}
+            {isAdmin && activeTab === 'current' && !status && (
+              <button
+                type="button"
+                className={`edit nudge-btn ${nudges[p.id] ? 'active' : ''}`}
+                aria-label={`${nudges[p.id] ? 'Remove nudge for' : 'Nudge'} ${p.name}`}
+                onClick={() => toggleNudge(p)}
+              >
+                {nudges[p.id] ? 'Un-nudge' : 'Nudge'}
+              </button>
+            )}
             {isAdmin && activeTab === 'current' && (
               <button
                 type="button"
@@ -1199,6 +1261,7 @@ function App() {
             {renderMoreButton(p)}
           </div>
         )}
+        {renderNudge(p)}
         {renderStaleWarning(p)}
         {renderHistory(p)}
       </li>
@@ -1261,6 +1324,7 @@ function App() {
             {renderMoreButton(p)}
           </div>
         )}
+        {renderNudge(p)}
         {renderStaleWarning(p)}
         {renderHistory(p)}
       </li>
@@ -1549,6 +1613,18 @@ function App() {
           <section className="column">
             <h2 className="column-title pending">
               Pending <span className="count">{pendingPlayers.length}</span>
+              {isAdmin && activeTab === 'current' && (
+                <span className="nudge-all">
+                  <button type="button" className="link-btn" onClick={nudgeAllPending}>
+                    Nudge all
+                  </button>
+                  {Object.keys(nudges).length > 0 && (
+                    <button type="button" className="link-btn" onClick={clearAllNudges}>
+                      Clear nudges
+                    </button>
+                  )}
+                </span>
+              )}
             </h2>
             <ul className="player-list">
               {pendingPlayers.length === 0 ? (

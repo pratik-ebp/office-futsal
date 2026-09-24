@@ -62,5 +62,9 @@ service cloud.firestore {
     match /movements/{cycleId} {
       allow read, write: if true;
     }
+    // Admin "are you joining?" nudges for Pending players; wiped on reset.
+    match /nudges/{cycleId} {
+      allow read, write: if true;
+    }
   }
 }
