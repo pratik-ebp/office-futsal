@@ -54,5 +54,9 @@ service cloud.firestore {
     match /lastPlayedRoster/{cycleId} {
       allow read, write: if true;
     }
+    // Tombstones for admin-deleted players so the seed roster never re-adds them.
+    match /removedPlayers/{playerId} {
+      allow read, write: if true;
+    }
   }
 }

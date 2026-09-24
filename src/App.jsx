@@ -53,6 +53,9 @@ const COSTS_COLLECTION = 'costs'
 const STATUS_COLLECTION = 'matchStatus'
 const MATCH_COLLECTION = 'matchInfo'
 const LAST_PLAYED_ROSTER_COLLECTION = 'lastPlayedRoster'
+// One doc per admin-deleted player id, so the seed roster never brings them
+// back (the roster file itself can't be edited from the browser).
+const REMOVED_PLAYERS_COLLECTION = 'removedPlayers'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
 // doc id instead of a date-derived key. "Last played" is a second fixed doc
@@ -162,8 +165,11 @@ function formatDayAndDate(isoDateStr) {
 async function ensureSeeded() {
   const snap = await getDocs(collection(db, PLAYERS_COLLECTION))
   if (!snap.empty) return
+  const removedSnap = await getDocs(collection(db, REMOVED_PLAYERS_COLLECTION))
+  const removedIds = new Set(removedSnap.docs.map((d) => d.id))
   const batch = writeBatch(db)
   for (const name of ROSTER) {
+    if (removedIds.has(slugify(name))) continue
     batch.set(doc(db, PLAYERS_COLLECTION, slugify(name)), { name, lastMovedAt: serverTimestamp() })
   }
   await batch.commit()
@@ -280,7 +286,7 @@ function App() {
   useEffect(() => {
     ensureSeeded().then(backfillLastMovedAt)
     const unsubscribe = onSnapshot(collection(db, PLAYERS_COLLECTION), (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, name: d.data().name, lastMovedAt: d.data().lastMovedAt ?? null }))
+      const list = snap.docs.map((d) => ({ id: d.id, name: d.data().name, lastMovedAt: d.data().lastMovedAt ?? null, flagged: !!d.data().flagged }))
       list.sort((a, b) => a.name.localeCompare(b.name))
       setPlayers(list)
       setLoading(false)
@@ -583,18 +589,57 @@ function App() {
     setGuestError('')
   }
 
-  async function removePlayer(player) {
-    if (!isAdmin) return
-    if (!confirm(`Remove ${player.name}? This deletes their code and this week's response too.`)) return
+  async function deletePlayerData(player) {
     const id = player.id
     await deleteDoc(doc(db, PLAYERS_COLLECTION, id))
     await deleteDoc(doc(db, CODES_COLLECTION, id))
+    await setDoc(doc(db, REMOVED_PLAYERS_COLLECTION, id), { name: player.name, removedAt: serverTimestamp() })
     await setDoc(
       doc(db, RESPONSES_COLLECTION, responsesDocId),
       { [id]: deleteField() },
       { merge: true },
     )
     await setDoc(doc(db, PAID_COLLECTION, responsesDocId), { [id]: deleteField() }, { merge: true })
+  }
+
+  async function removePlayer(player) {
+    if (!isAdmin) return
+    if (!confirm(`Remove ${player.name}? This deletes their code and this week's response too.`)) return
+    await deletePlayerData(player)
+  }
+
+  // Auto-removal: a Pending player with no movement for INACTIVITY_REMOVAL_DAYS
+  // is deleted entirely. Runs only in an admin session (a visitor with a wrong
+  // clock must never be able to mass-delete), once per page load, and aborts
+  // if it would remove more than half the roster — that pattern means a bad
+  // clock or bad data, not real inactivity. Reset never touches lastMovedAt,
+  // so it doesn't rescue anyone from this.
+  const sweptRef = useRef(false)
+  useEffect(() => {
+    if (!isAdmin || loading || sweptRef.current || players.length === 0) return
+    sweptRef.current = true
+    const expired = players.filter((p) => {
+      if (responses[p.id]) return false
+      const days = daysSinceMoved(p)
+      return days !== null && days >= INACTIVITY_REMOVAL_DAYS
+    })
+    if (expired.length === 0) return
+    if (expired.length > players.length / 2) {
+      console.warn(`Inactivity sweep aborted: ${expired.length}/${players.length} players look expired.`)
+      return
+    }
+    expired.forEach(deletePlayerData)
+  }, [isAdmin, loading, players, responses])
+
+  // Admin flag: shows the "account will be removed in 2 weeks" notice on the
+  // card regardless of column, until unflagged.
+  async function toggleFlag(player) {
+    if (!isAdmin) return
+    await setDoc(
+      doc(db, PLAYERS_COLLECTION, player.id),
+      player.flagged ? { flagged: deleteField() } : { flagged: true },
+      { merge: true },
+    )
   }
 
   function startEdit(player) {
@@ -914,10 +959,13 @@ function App() {
   }
 
   function rowClassName(p) {
-    return `player-row${isStalePending(p) ? ' stale' : ''}`
+    return `player-row${p.flagged || isStalePending(p) ? ' stale' : ''}`
   }
 
   function renderStaleWarning(p) {
+    if (p.flagged) {
+      return <p className="stale-warning">Your account will be removed in 2 weeks.</p>
+    }
     if (!isStalePending(p)) return null
     const days = daysSinceMoved(p)
     return (
@@ -1034,6 +1082,16 @@ function App() {
               <button
                 type="button"
                 className="edit"
+                aria-label={`${p.flagged ? 'Unflag' : 'Flag'} ${p.name}`}
+                onClick={() => toggleFlag(p)}
+              >
+                {p.flagged ? 'Unflag' : 'Flag'}
+              </button>
+            )}
+            {isAdmin && activeTab === 'current' && (
+              <button
+                type="button"
+                className="edit"
                 aria-label={`Edit ${p.name}`}
                 onClick={() => startEdit(p)}
               >
@@ -1080,6 +1138,16 @@ function App() {
             >
               ↺
             </button>
+            {isAdmin && activeTab === 'current' && (
+              <button
+                type="button"
+                className="edit"
+                aria-label={`${p.flagged ? 'Unflag' : 'Flag'} ${p.name}`}
+                onClick={() => toggleFlag(p)}
+              >
+                {p.flagged ? 'Unflag' : 'Flag'}
+              </button>
+            )}
             {isAdmin && activeTab === 'current' && (
               <button
                 type="button"
