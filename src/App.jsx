@@ -1099,7 +1099,14 @@ function App() {
 
   function renderNudge(p) {
     if (!isNudged(p)) return null
-    return <p className="nudge-note">👋 Are you joining this week?</p>
+    return (
+      <p className="nudge-note">
+        <span className="nudge-wave" aria-hidden="true">
+          👋
+        </span>{' '}
+        Are you joining this week?
+      </p>
+    )
   }
 
   function renderStaleWarning(p) {
