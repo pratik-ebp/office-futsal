@@ -1111,7 +1111,10 @@ function App() {
 
   function renderStaleWarning(p) {
     if (p.flagged) {
-      return <p className="stale-warning">Your account will be removed in 2 weeks.</p>
+      return <p className="stale-warning">
+          You are not even RSVPing, let alone participating. Your account will be deleted in 2 weeks
+          if this continues!
+        </p>
     }
     if (!isStalePending(p)) return null
     const days = daysSinceMoved(p)
