@@ -74,6 +74,8 @@ const LAST_PLAYED_DOC_ID = 'lastPlayed'
 const STATUS_LABELS = {
   counting: 'Counting players',
   booked: 'Booked',
+  played: 'Played',
+  collecting: 'Collecting payments',
   cancelled: 'Cancelled',
 }
 // Firestore docs cap out at 1 MiB; leave headroom for the other fields on
@@ -1051,6 +1053,7 @@ function App() {
   const displayResponses = activeTab === 'current' ? responses : lastPlayedResponses
   const displayPaid = activeTab === 'current' ? paid : lastPlayedPaid
   const displayCost = activeTab === 'current' ? cost : lastPlayedCost
+  const displayMatchInfo = activeTab === 'current' ? matchInfo : lastPlayedMatchInfo
   const displayStatus = activeTab === 'current' ? matchStatus : lastPlayedStatus
 
   const visiblePlayers = displayPlayers.filter((p) =>
@@ -1589,23 +1592,30 @@ function App() {
           />
         )}
         {displayStatus && (
-          <div className="status-inline">
-            <span className="status-inline-title">Futsal Status:</span>
-            <span className={`status-badge status-${displayStatus}`}>{STATUS_LABELS[displayStatus]}</span>
-            {isAdmin && activeTab === 'current' && (
-              <div className="status-admin-actions">
-                {Object.keys(STATUS_LABELS).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
-                    onClick={() => setStatus(key)}
-                  >
-                    {STATUS_LABELS[key]}
-                  </button>
-                ))}
-              </div>
+          <div className="status-block">
+            {displayMatchInfo?.day && displayMatchInfo?.date && (
+              <p className="status-date">
+                {displayMatchInfo.day}, {displayMatchInfo.date}
+              </p>
             )}
+            <div className="status-inline">
+              <span className="status-inline-title">Futsal Status:</span>
+              <span className={`status-badge status-${displayStatus}`}>{STATUS_LABELS[displayStatus]}</span>
+              {isAdmin && activeTab === 'current' && (
+                <div className="status-admin-actions">
+                  {Object.keys(STATUS_LABELS).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`choice status-choice-${key} ${matchStatus === key ? 'active' : ''}`}
+                      onClick={() => setStatus(key)}
+                    >
+                      {STATUS_LABELS[key]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
