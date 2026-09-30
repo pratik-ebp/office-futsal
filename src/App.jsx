@@ -63,9 +63,10 @@ const MOVEMENTS_COLLECTION = 'movements'
 // Admin "are you joining?" nudges for Pending players this cycle: one doc,
 // {playerId: nudgedAtMs}. Cleared when the player responds and on reset.
 const NUDGES_COLLECTION = 'nudges'
-// Monthly per-player Present/Absent tally, set entirely by hand by the
-// admin — no automatic tracking. Doc id is the calendar month ("2026-09"),
-// so a new month is just a new (empty) doc — nothing to actively reset.
+// Monthly per-player Present/Absent/Pending tally, set entirely by hand by
+// the admin — no automatic tracking. Doc id is the calendar month
+// ("2026-09"), so a new month is just a new (empty) doc — nothing to
+// actively reset.
 const ATTENDANCE_COLLECTION = 'attendanceTally'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
@@ -288,12 +289,14 @@ function App() {
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
   const [editError, setEditError] = useState('')
-  // Admin editing a player's monthly Present/Absent tally by hand — same
-  // one-row-at-a-time pattern as the name/code edit above. Always edits
-  // the current calendar month's doc, overwriting both counts outright.
+  // Admin editing a player's monthly Present/Absent/Pending tally by hand —
+  // same one-row-at-a-time pattern as the name/code edit above. Always
+  // edits the current calendar month's doc, overwriting all three counts
+  // outright.
   const [editingTallyId, setEditingTallyId] = useState(null)
   const [tallyPresentInput, setTallyPresentInput] = useState('0')
   const [tallyAbsentInput, setTallyAbsentInput] = useState('0')
+  const [tallyPendingInput, setTallyPendingInput] = useState('0')
 
   // Ball-arc move animation: rowRefs tracks every currently-mounted row DOM
   // node by player id (across all four columns) so we can grab its rect
@@ -761,6 +764,7 @@ function App() {
     setEditingTallyId(player.id)
     setTallyPresentInput(String(t.present ?? 0))
     setTallyAbsentInput(String(t.absent ?? 0))
+    setTallyPendingInput(String(t.pending ?? 0))
   }
 
   function cancelTallyEdit() {
@@ -773,7 +777,13 @@ function App() {
     const monthKey = currentMonthKey()
     await setDoc(
       doc(db, ATTENDANCE_COLLECTION, monthKey),
-      { [player.id]: { present: clamp(tallyPresentInput), absent: clamp(tallyAbsentInput) } },
+      {
+        [player.id]: {
+          present: clamp(tallyPresentInput),
+          absent: clamp(tallyAbsentInput),
+          pending: clamp(tallyPendingInput),
+        },
+      },
       { merge: true },
     )
     cancelTallyEdit()
@@ -1179,6 +1189,15 @@ function App() {
               onChange={(e) => setTallyAbsentInput(e.target.value)}
             />
           </label>
+          <label>
+            Pending
+            <input
+              type="number"
+              min="0"
+              value={tallyPendingInput}
+              onChange={(e) => setTallyPendingInput(e.target.value)}
+            />
+          </label>
           <button type="submit" className="link-btn">
             Save
           </button>
@@ -1190,14 +1209,25 @@ function App() {
     }
 
     const t = attendanceTally[p.id]
-    const total = t ? (t.present ?? 0) + (t.absent ?? 0) : 0
-    if (total === 0 && !(isAdmin && activeTab === 'current')) return null
+    const present = t?.present ?? 0
+    const absent = t?.absent ?? 0
+    const pending = t?.pending ?? 0
+    const total = present + absent + pending
+    // Always visible, not just when the admin is editing or a count exists —
+    // a 0/0/0 card still shows the labeled counts, just no colored segments.
     return (
       <div className="tally-row">
+        <span className="tally-counts">
+          Present {present} · Absent {absent} · Pending {pending}
+        </span>
         {total > 0 && (
-          <div className="tally-bar" title={`This month — Present: ${t.present ?? 0}, Absent: ${t.absent ?? 0}`}>
-            {t.present > 0 && <span className="tally-seg tally-present" style={{ flexGrow: t.present }} />}
-            {t.absent > 0 && <span className="tally-seg tally-absent" style={{ flexGrow: t.absent }} />}
+          <div
+            className="tally-bar"
+            title={`This month — Present: ${present}, Absent: ${absent}, Pending: ${pending}`}
+          >
+            {present > 0 && <span className="tally-seg tally-present" style={{ flexGrow: present }} />}
+            {absent > 0 && <span className="tally-seg tally-absent" style={{ flexGrow: absent }} />}
+            {pending > 0 && <span className="tally-seg tally-pending" style={{ flexGrow: pending }} />}
           </div>
         )}
         {isAdmin && (

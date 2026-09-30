@@ -1027,6 +1027,12 @@
   margin-top: 2px;
 }
 
+.tally-counts {
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .tally-bar {
   flex: 1;
   display: flex;
@@ -1080,4 +1086,8 @@
 
 .tally-absent {
   background: #ef4444;
+}
+
+.tally-pending {
+  background: #38bdf8;
 }
