@@ -6,6 +6,7 @@ import {
   deleteField,
   doc,
   getDoc,
+  increment,
   getDocs,
   onSnapshot,
   serverTimestamp,
@@ -789,6 +790,20 @@ function App() {
     cancelTallyEdit()
   }
 
+  // Bulk +1 for a whole column at once — same idempotency-free, admin-only,
+  // manual-only pattern as the single-card edit above, just applied to every
+  // player currently in that column (ignoring the search box, like nudge
+  // all/clear all does).
+  async function bumpColumnTally(bucket, columnPlayers) {
+    if (!isAdmin || columnPlayers.length === 0) return
+    const monthKey = currentMonthKey()
+    const update = {}
+    for (const p of columnPlayers) {
+      update[`${p.id}.${bucket}`] = increment(1)
+    }
+    await setDoc(doc(db, ATTENDANCE_COLLECTION, monthKey), update, { merge: true })
+  }
+
   async function submitLogin(e) {
     e.preventDefault()
     if (!ADMIN_PASSWORD_HASH) {
@@ -1124,6 +1139,14 @@ function App() {
   const outPlayers = visiblePlayers.filter((p) => displayResponses[p.id] === 'no')
   const paidPlayers = confirmedPlayers.filter((p) => displayPaid[p.id])
 
+  // Unfiltered by search — column-wide tally bumps hit the whole column,
+  // same as nudge all/clear all already do.
+  const allConfirmedPlayers = players.filter((p) => responses[p.id] === 'yes')
+  const allPendingPlayers = players.filter((p) => !responses[p.id])
+  const allInPlayers = allConfirmedPlayers.filter((p) => !paid[p.id])
+  const allOutPlayers = players.filter((p) => responses[p.id] === 'no')
+  const allPaidPlayers = allConfirmedPlayers.filter((p) => paid[p.id])
+
   // Cost banner on the Current tab keeps showing last week's receipt until
   // admin uploads a new one after reset — reset already zeroed out `paid`
   // for the new week, so counting from it here would wrongly show Rs. 0
@@ -1212,24 +1235,26 @@ function App() {
     const present = t?.present ?? 0
     const absent = t?.absent ?? 0
     const pending = t?.pending ?? 0
-    const total = present + absent + pending
-    // Always visible, not just when the admin is editing or a count exists —
-    // a 0/0/0 card still shows the labeled counts, just no colored segments.
+    // Tally marks, not a proportional bar or numbers — color alone tells
+    // present (green) from absent (red) from pending (blue). Always
+    // visible, even at 0/0/0, so the label and (for admin) the edit
+    // control are always there.
+    const marks = (count, cls) =>
+      count > 0 && (
+        <span className="tally-group">
+          {Array.from({ length: count }, (_, i) => (
+            <span key={i} className={`tally-mark ${cls}`} />
+          ))}
+        </span>
+      )
     return (
       <div className="tally-row">
-        <span className="tally-counts">
-          Present {present} · Absent {absent} · Pending {pending}
-        </span>
-        {total > 0 && (
-          <div
-            className="tally-bar"
-            title={`This month — Present: ${present}, Absent: ${absent}, Pending: ${pending}`}
-          >
-            {present > 0 && <span className="tally-seg tally-present" style={{ flexGrow: present }} />}
-            {absent > 0 && <span className="tally-seg tally-absent" style={{ flexGrow: absent }} />}
-            {pending > 0 && <span className="tally-seg tally-pending" style={{ flexGrow: pending }} />}
-          </div>
-        )}
+        <span className="tally-label">Attendance history</span>
+        <div className="tally-marks">
+          {marks(present, 'tally-present')}
+          {marks(absent, 'tally-absent')}
+          {marks(pending, 'tally-pending')}
+        </div>
         {isAdmin && (
           <button type="button" className="link-btn tally-edit-btn" onClick={() => startTallyEdit(p)}>
             Edit tally
@@ -1775,7 +1800,7 @@ function App() {
             <h2 className="column-title pending">
               Pending <span className="count">{pendingPlayers.length}</span>
               {isAdmin && activeTab === 'current' && (
-                <span className="nudge-all">
+                <span className="column-actions">
                   <button type="button" className="link-btn" onClick={nudgeAllPending}>
                     Nudge all
                   </button>
@@ -1784,6 +1809,13 @@ function App() {
                       Clear nudges
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => bumpColumnTally('pending', allPendingPlayers)}
+                  >
+                    +1 tally, whole column
+                  </button>
                 </span>
               )}
             </h2>
@@ -1799,6 +1831,13 @@ function App() {
           <section className="column">
             <h2 className="column-title in">
               In <span className="count">{inPlayers.length}</span>
+              {isAdmin && activeTab === 'current' && (
+                <span className="column-actions">
+                  <button type="button" className="link-btn" onClick={() => bumpColumnTally('present', allInPlayers)}>
+                    +1 tally, whole column
+                  </button>
+                </span>
+              )}
             </h2>
             <ul className="player-list">
               {inPlayers.length === 0 ? (
@@ -1812,6 +1851,13 @@ function App() {
           <section className="column">
             <h2 className="column-title out">
               Out <span className="count">{outPlayers.length}</span>
+              {isAdmin && activeTab === 'current' && (
+                <span className="column-actions">
+                  <button type="button" className="link-btn" onClick={() => bumpColumnTally('absent', allOutPlayers)}>
+                    +1 tally, whole column
+                  </button>
+                </span>
+              )}
             </h2>
             <ul className="player-list">
               {outPlayers.length === 0 ? (
@@ -1825,6 +1871,17 @@ function App() {
           <section className="column">
             <h2 className="column-title paid">
               Paid <span className="count">{paidPlayers.length}</span>
+              {isAdmin && activeTab === 'current' && (
+                <span className="column-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => bumpColumnTally('present', allPaidPlayers)}
+                  >
+                    +1 tally, whole column
+                  </button>
+                </span>
+              )}
             </h2>
             <ul className="player-list">
               {paidPlayers.length === 0 ? (

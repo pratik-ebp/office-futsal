@@ -945,7 +945,7 @@
   border-color: #38bdf8;
 }
 
-.nudge-all {
+.column-actions {
   margin-left: auto;
   display: flex;
   gap: 10px;
@@ -1027,20 +1027,23 @@
   margin-top: 2px;
 }
 
-.tally-counts {
+.tally-label {
   font-size: 11px;
   color: var(--text);
   white-space: nowrap;
 }
 
-.tally-bar {
+.tally-marks {
   flex: 1;
   display: flex;
-  height: 5px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--border);
-  min-width: 24px;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tally-group {
+  display: flex;
+  gap: 2px;
 }
 
 .tally-edit-btn {
@@ -1076,18 +1079,21 @@
   font-size: 12px;
 }
 
-.tally-seg {
-  min-width: 3px;
+.tally-mark {
+  display: inline-block;
+  width: 2px;
+  height: 13px;
+  border-radius: 1px;
 }
 
-.tally-present {
+.tally-mark.tally-present {
   background: #22c55e;
 }
 
-.tally-absent {
+.tally-mark.tally-absent {
   background: #ef4444;
 }
 
-.tally-pending {
+.tally-mark.tally-pending {
   background: #38bdf8;
 }
