@@ -66,5 +66,9 @@ service cloud.firestore {
     match /nudges/{cycleId} {
       allow read, write: if true;
     }
+    // Monthly Present/Absent tally per player, set by hand by the admin.
+    match /attendanceTally/{monthKey} {
+      allow read, write: if true;
+    }
   }
 }

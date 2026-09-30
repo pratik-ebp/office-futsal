@@ -63,6 +63,10 @@ const MOVEMENTS_COLLECTION = 'movements'
 // Admin "are you joining?" nudges for Pending players this cycle: one doc,
 // {playerId: nudgedAtMs}. Cleared when the player responds and on reset.
 const NUDGES_COLLECTION = 'nudges'
+// Monthly per-player Present/Absent tally, set entirely by hand by the
+// admin — no automatic tracking. Doc id is the calendar month ("2026-09"),
+// so a new month is just a new (empty) doc — nothing to actively reset.
+const ATTENDANCE_COLLECTION = 'attendanceTally'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
 // doc id instead of a date-derived key. "Last played" is a second fixed doc
@@ -154,6 +158,12 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10)
 }
 
+// Calendar month key for the attendance tally doc, in the visitor's own
+// local time — purely a storage bucket, not a schedule trigger.
+function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7)
+}
+
 // A native <input type="date"> gives back "YYYY-MM-DD". Appending a local
 // midnight time (rather than parsing the bare date string, which Date
 // treats as UTC) avoids the day shifting backward one in timezones behind
@@ -231,6 +241,7 @@ function App() {
   const [movements, setMovements] = useState({})
   const [nudges, setNudges] = useState({})
   const [expandedIds, setExpandedIds] = useState(() => new Set())
+  const [attendanceTally, setAttendanceTally] = useState({})
   const [lastPlayedRoster, setLastPlayedRoster] = useState([])
   const [lastPlayedResponses, setLastPlayedResponses] = useState({})
   const [lastPlayedPaid, setLastPlayedPaid] = useState({})
@@ -277,6 +288,12 @@ function App() {
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
   const [editError, setEditError] = useState('')
+  // Admin editing a player's monthly Present/Absent tally by hand — same
+  // one-row-at-a-time pattern as the name/code edit above. Always edits
+  // the current calendar month's doc, overwriting both counts outright.
+  const [editingTallyId, setEditingTallyId] = useState(null)
+  const [tallyPresentInput, setTallyPresentInput] = useState('0')
+  const [tallyAbsentInput, setTallyAbsentInput] = useState('0')
 
   // Ball-arc move animation: rowRefs tracks every currently-mounted row DOM
   // node by player id (across all four columns) so we can grab its rect
@@ -312,6 +329,14 @@ function App() {
     })
     return unsubscribe
   }, [responsesDocId])
+
+  useEffect(() => {
+    const monthKey = currentMonthKey()
+    const unsubscribe = onSnapshot(doc(db, ATTENDANCE_COLLECTION, monthKey), (snap) => {
+      setAttendanceTally(snap.exists() ? snap.data() : {})
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, NUDGES_COLLECTION, responsesDocId), (snap) => {
@@ -730,6 +755,30 @@ function App() {
     cancelEdit()
   }
 
+  function startTallyEdit(player) {
+    if (!isAdmin) return
+    const t = attendanceTally[player.id] ?? {}
+    setEditingTallyId(player.id)
+    setTallyPresentInput(String(t.present ?? 0))
+    setTallyAbsentInput(String(t.absent ?? 0))
+  }
+
+  function cancelTallyEdit() {
+    setEditingTallyId(null)
+  }
+
+  async function saveTallyEdit(player) {
+    if (!isAdmin) return
+    const clamp = (v) => Math.max(0, parseInt(v, 10) || 0)
+    const monthKey = currentMonthKey()
+    await setDoc(
+      doc(db, ATTENDANCE_COLLECTION, monthKey),
+      { [player.id]: { present: clamp(tallyPresentInput), absent: clamp(tallyAbsentInput) } },
+      { merge: true },
+    )
+    cancelTallyEdit()
+  }
+
   async function submitLogin(e) {
     e.preventDefault()
     if (!ADMIN_PASSWORD_HASH) {
@@ -1100,6 +1149,66 @@ function App() {
     return `player-row${p.flagged || isStalePending(p) ? ' stale' : ''}${isNudged(p) ? ' nudged' : ''}`
   }
 
+  function renderTally(p) {
+    if (activeTab !== 'current') return null
+
+    if (editingTallyId === p.id) {
+      return (
+        <form
+          className="tally-edit-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            saveTallyEdit(p)
+          }}
+        >
+          <label>
+            Present
+            <input
+              type="number"
+              min="0"
+              value={tallyPresentInput}
+              onChange={(e) => setTallyPresentInput(e.target.value)}
+            />
+          </label>
+          <label>
+            Absent
+            <input
+              type="number"
+              min="0"
+              value={tallyAbsentInput}
+              onChange={(e) => setTallyAbsentInput(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="link-btn">
+            Save
+          </button>
+          <button type="button" className="link-btn" onClick={cancelTallyEdit}>
+            Cancel
+          </button>
+        </form>
+      )
+    }
+
+    const t = attendanceTally[p.id]
+    const total = t ? (t.present ?? 0) + (t.absent ?? 0) : 0
+    if (total === 0 && !(isAdmin && activeTab === 'current')) return null
+    return (
+      <div className="tally-row">
+        {total > 0 && (
+          <div className="tally-bar" title={`This month — Present: ${t.present ?? 0}, Absent: ${t.absent ?? 0}`}>
+            {t.present > 0 && <span className="tally-seg tally-present" style={{ flexGrow: t.present }} />}
+            {t.absent > 0 && <span className="tally-seg tally-absent" style={{ flexGrow: t.absent }} />}
+          </div>
+        )}
+        {isAdmin && (
+          <button type="button" className="link-btn tally-edit-btn" onClick={() => startTallyEdit(p)}>
+            Edit tally
+          </button>
+        )}
+      </div>
+    )
+  }
+
   function renderNudge(p) {
     if (!isNudged(p)) return null
     return (
@@ -1274,6 +1383,7 @@ function App() {
             {renderMoreButton(p)}
           </div>
         )}
+        {renderTally(p)}
         {renderNudge(p)}
         {renderStaleWarning(p)}
         {renderHistory(p)}
@@ -1337,6 +1447,7 @@ function App() {
             {renderMoreButton(p)}
           </div>
         )}
+        {renderTally(p)}
         {renderNudge(p)}
         {renderStaleWarning(p)}
         {renderHistory(p)}

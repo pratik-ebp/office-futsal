@@ -1018,3 +1018,66 @@
     animation: none;
   }
 }
+
+.tally-row {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.tally-bar {
+  flex: 1;
+  display: flex;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+  min-width: 24px;
+}
+
+.tally-edit-btn {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.tally-edit-form {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.tally-edit-form label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tally-edit-form input {
+  width: 48px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tally-seg {
+  min-width: 3px;
+}
+
+.tally-present {
+  background: #22c55e;
+}
+
+.tally-absent {
+  background: #ef4444;
+}
