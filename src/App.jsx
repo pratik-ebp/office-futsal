@@ -797,9 +797,14 @@ function App() {
   async function bumpColumnTally(bucket, columnPlayers) {
     if (!isAdmin || columnPlayers.length === 0) return
     const monthKey = currentMonthKey()
+    // A dotted string key ("id.bucket") is NOT parsed as a nested path by
+    // setDoc(..., {merge:true}) — it silently writes one literal field
+    // named "id.bucket" instead, which is why this didn't work before.
+    // A real nested object per player merges correctly and increment()
+    // still resolves inside it, verified against production Firestore.
     const update = {}
     for (const p of columnPlayers) {
-      update[`${p.id}.${bucket}`] = increment(1)
+      update[p.id] = { [bucket]: increment(1) }
     }
     await setDoc(doc(db, ATTENDANCE_COLLECTION, monthKey), update, { merge: true })
   }
