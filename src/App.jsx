@@ -64,11 +64,10 @@ const MOVEMENTS_COLLECTION = 'movements'
 // Admin "are you joining?" nudges for Pending players this cycle: one doc,
 // {playerId: nudgedAtMs}. Cleared when the player responds and on reset.
 const NUDGES_COLLECTION = 'nudges'
-// Monthly per-player Present/Absent/Pending tally, set entirely by hand by
-// the admin — no automatic tracking. Doc id is the calendar month
-// ("2026-09"), so a new month is just a new (empty) doc — nothing to
-// actively reset.
+// All-time per-player Present/Absent/Pending tally, set entirely by hand
+// by the admin — no automatic tracking, no reset, one permanent doc.
 const ATTENDANCE_COLLECTION = 'attendanceTally'
+const ATTENDANCE_DOC_ID = 'all-time'
 // Admin now controls resets manually (no more auto-rollover on a computed
 // Thursday date), so every cycle-scoped collection lives under one fixed
 // doc id instead of a date-derived key. "Last played" is a second fixed doc
@@ -158,12 +157,6 @@ async function sha256Hex(text) {
 
 function isoDate(date) {
   return date.toISOString().slice(0, 10)
-}
-
-// Calendar month key for the attendance tally doc, in the visitor's own
-// local time — purely a storage bucket, not a schedule trigger.
-function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7)
 }
 
 // A native <input type="date"> gives back "YYYY-MM-DD". Appending a local
@@ -290,10 +283,9 @@ function App() {
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
   const [editError, setEditError] = useState('')
-  // Admin editing a player's monthly Present/Absent/Pending tally by hand —
-  // same one-row-at-a-time pattern as the name/code edit above. Always
-  // edits the current calendar month's doc, overwriting all three counts
-  // outright.
+  // Admin editing a player's all-time Present/Absent/Pending tally by
+  // hand — same one-row-at-a-time pattern as the name/code edit above.
+  // Overwrites all three counts outright, permanently (no reset, ever).
   const [editingTallyId, setEditingTallyId] = useState(null)
   const [tallyPresentInput, setTallyPresentInput] = useState('0')
   const [tallyAbsentInput, setTallyAbsentInput] = useState('0')
@@ -335,8 +327,7 @@ function App() {
   }, [responsesDocId])
 
   useEffect(() => {
-    const monthKey = currentMonthKey()
-    const unsubscribe = onSnapshot(doc(db, ATTENDANCE_COLLECTION, monthKey), (snap) => {
+    const unsubscribe = onSnapshot(doc(db, ATTENDANCE_COLLECTION, ATTENDANCE_DOC_ID), (snap) => {
       setAttendanceTally(snap.exists() ? snap.data() : {})
     })
     return unsubscribe
@@ -775,9 +766,8 @@ function App() {
   async function saveTallyEdit(player) {
     if (!isAdmin) return
     const clamp = (v) => Math.max(0, parseInt(v, 10) || 0)
-    const monthKey = currentMonthKey()
     await setDoc(
-      doc(db, ATTENDANCE_COLLECTION, monthKey),
+      doc(db, ATTENDANCE_COLLECTION, ATTENDANCE_DOC_ID),
       {
         [player.id]: {
           present: clamp(tallyPresentInput),
@@ -796,7 +786,6 @@ function App() {
   // all/clear all does).
   async function bumpColumnTally(bucket, columnPlayers) {
     if (!isAdmin || columnPlayers.length === 0) return
-    const monthKey = currentMonthKey()
     // A dotted string key ("id.bucket") is NOT parsed as a nested path by
     // setDoc(..., {merge:true}) — it silently writes one literal field
     // named "id.bucket" instead, which is why this didn't work before.
@@ -806,7 +795,7 @@ function App() {
     for (const p of columnPlayers) {
       update[p.id] = { [bucket]: increment(1) }
     }
-    await setDoc(doc(db, ATTENDANCE_COLLECTION, monthKey), update, { merge: true })
+    await setDoc(doc(db, ATTENDANCE_COLLECTION, ATTENDANCE_DOC_ID), update, { merge: true })
   }
 
   async function submitLogin(e) {
