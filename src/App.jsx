@@ -706,12 +706,17 @@ function App() {
   }
 
   // Admin flag: shows the "account will be removed in 2 weeks" notice on the
-  // card regardless of column, until unflagged.
+  // card regardless of column, until unflagged. Unflagging also clears the
+  // separate automatic 14-day inactivity warning and restarts that
+  // countdown from today — otherwise a stale player would still show the
+  // auto warning right after being unflagged.
   async function toggleFlag(player) {
     if (!isAdmin) return
     await setDoc(
       doc(db, PLAYERS_COLLECTION, player.id),
-      player.flagged ? { flagged: deleteField() } : { flagged: true },
+      player.flagged
+        ? { flagged: deleteField(), lastMovedAt: serverTimestamp() }
+        : { flagged: true },
       { merge: true },
     )
   }
