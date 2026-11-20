@@ -21,7 +21,7 @@ import './App.css'
 const REMEMBERED_CODE_PREFIX = 'thursday-players:code:'
 const rememberedCodeKey = (id) => `${REMEMBERED_CODE_PREFIX}${id}`
 // Admin identity is enforced server-side by firestore.rules (same email).
-// This constant only tells the login form which account to sign in to.
+// The client uses it only to decide whether to show admin UI.
 const ADMIN_EMAIL = 'admin@officefutsal.com'
 
 // Safari (private browsing, or "Prevent Cross-Site Tracking" in some
@@ -265,6 +265,7 @@ function App() {
   // rules are what actually block non-admin writes.
   const [isAdmin, setIsAdmin] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
   const [passwordInput, setPasswordInput] = useState('')
   const [loginError, setLoginError] = useState('')
 
@@ -814,12 +815,13 @@ function App() {
   async function submitLogin(e) {
     e.preventDefault()
     try {
-      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, passwordInput)
+      await signInWithEmailAndPassword(auth, emailInput.trim(), passwordInput)
       setShowLogin(false)
+      setEmailInput('')
       setPasswordInput('')
       setLoginError('')
     } catch {
-      setLoginError('Wrong password.')
+      setLoginError('Wrong email or password.')
     }
   }
 
@@ -1527,11 +1529,19 @@ function App() {
         ) : showLogin ? (
           <form className="login-form" onSubmit={submitLogin}>
             <input
+              type="email"
+              placeholder="Admin email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              autoComplete="username"
+              autoFocus
+            />
+            <input
               type="password"
               placeholder="Admin password"
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
-              autoFocus
+              autoComplete="current-password"
             />
             <button type="submit">Unlock</button>
             <button
@@ -1540,6 +1550,7 @@ function App() {
               onClick={() => {
                 setShowLogin(false)
                 setLoginError('')
+                setEmailInput('')
                 setPasswordInput('')
               }}
             >
