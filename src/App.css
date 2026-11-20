@@ -1099,3 +1099,19 @@
 .tally-mark.tally-pending {
   background: #38bdf8;
 }
+
+.password-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.password-field input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  font-size: 12px;
+}

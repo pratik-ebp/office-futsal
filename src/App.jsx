@@ -267,6 +267,7 @@ function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [emailInput, setEmailInput] = useState('')
   const [passwordInput, setPasswordInput] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
 
   // Code-gate for column moves (In/Out/Undo/Pay/Unpay): one player row at a
@@ -819,6 +820,7 @@ function App() {
       setShowLogin(false)
       setEmailInput('')
       setPasswordInput('')
+      setShowPassword(false)
       setLoginError('')
     } catch {
       setLoginError('Wrong email or password.')
@@ -1536,13 +1538,23 @@ function App() {
               autoComplete="username"
               autoFocus
             />
-            <input
-              type="password"
-              placeholder="Admin password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              autoComplete="current-password"
-            />
+            <span className="password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Admin password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="link-btn password-toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </span>
             <button type="submit">Unlock</button>
             <button
               type="button"
@@ -1552,6 +1564,7 @@ function App() {
                 setLoginError('')
                 setEmailInput('')
                 setPasswordInput('')
+                setShowPassword(false)
               }}
             >
               Cancel
