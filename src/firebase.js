@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { initializeFirestore } from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,3 +17,4 @@ const app = initializeApp(firebaseConfig)
 // onSnapshot stream. Auto-detecting long-polling fixes that on Safari
 // without changing behavior on Chrome/Firefox, which don't need it.
 export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true })
+export const auth = getAuth(app)

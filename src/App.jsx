@@ -13,14 +13,16 @@ import {
   setDoc,
   writeBatch,
 } from 'firebase/firestore'
-import { db } from './firebase'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { auth, db } from './firebase'
 import { ROSTER } from './data/roster'
 import './App.css'
 
-const ADMIN_SESSION_KEY = 'thursday-players:isAdmin'
 const REMEMBERED_CODE_PREFIX = 'thursday-players:code:'
 const rememberedCodeKey = (id) => `${REMEMBERED_CODE_PREFIX}${id}`
-const ADMIN_PASSWORD_HASH = import.meta.env.VITE_ADMIN_PASSWORD_HASH
+// Admin identity is enforced server-side by firestore.rules (same email).
+// This constant only tells the login form which account to sign in to.
+const ADMIN_EMAIL = 'admin@officefutsal.com'
 
 // Safari (private browsing, or "Prevent Cross-Site Tracking" in some
 // configurations) can throw on localStorage access instead of just being
@@ -259,9 +261,9 @@ function App() {
   const [imageExpanded, setImageExpanded] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
-  const [isAdmin, setIsAdmin] = useState(
-    () => sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
-  )
+  // UI flag only — derived from the real Firebase Auth session. Firestore
+  // rules are what actually block non-admin writes.
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -307,6 +309,12 @@ function App() {
       else rowRefs.current.delete(id)
     }
   }
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      setIsAdmin(!!user && user.email?.toLowerCase() === ADMIN_EMAIL)
+    })
+  }, [])
 
   useEffect(() => {
     ensureSeeded().then(backfillLastMovedAt)
@@ -805,25 +813,18 @@ function App() {
 
   async function submitLogin(e) {
     e.preventDefault()
-    if (!ADMIN_PASSWORD_HASH) {
-      setLoginError('No admin password configured (set VITE_ADMIN_PASSWORD_HASH).')
-      return
-    }
-    const hash = await sha256Hex(passwordInput)
-    if (hash === ADMIN_PASSWORD_HASH) {
-      sessionStorage.setItem(ADMIN_SESSION_KEY, 'true')
-      setIsAdmin(true)
+    try {
+      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, passwordInput)
       setShowLogin(false)
       setPasswordInput('')
       setLoginError('')
-    } else {
+    } catch {
       setLoginError('Wrong password.')
     }
   }
 
   function logout() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY)
-    setIsAdmin(false)
+    signOut(auth)
   }
 
   function setResponse(id, value, docId) {

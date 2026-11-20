@@ -1,74 +1,49 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Open read/write for everyone with the site URL. This app has no
-    // server-side auth — the "Admin login" button is a client-side UI
-    // gate only (see .env.example), not enforced here. Anyone who opens
-    // devtools can write to Firestore directly regardless of these
-    // rules being this permissive. Acceptable for a casual internal
-    // office poll; do not reuse this file for anything holding
-    // sensitive data.
+
+    // Admin = the single Firebase Auth account below. Enforced server-side,
+    // so editing client state in devtools gives no write access.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email.lower() == 'admin@officefutsal.com';
+    }
+
+    // Roster: anyone reads. Players may only touch lastMovedAt.
+    // Create, delete and rename/flag are admin only.
     match /players/{playerId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMovedAt']);
     }
-    match /responses/{cycleId} {
-      allow read, write: if true;
+
+    // Open: players use these through the code-gated UI without logging in.
+    match /responses/{cycleId} { allow read, write: if true; }
+    match /paid/{cycleId}      { allow read, write: if true; }
+    match /movements/{cycleId} { allow read, write: if true; }
+
+    // Players can clear their own nudge. Only admin deletes the doc.
+    match /nudges/{cycleId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
     }
-    match /paid/{cycleId} {
-      allow read, write: if true;
-    }
-    // Player codes live separately from /players so they're never part of
-    // the normal roster payload every visitor downloads on page load. `get`
-    // (fetch one known doc id) is allowed so the app can check a single
-    // code when someone verifies a move; `list` (dump/query the whole
-    // collection) is denied so codes can't be bulk-scraped in one call.
-    // Doc IDs are player-name slugs, which are public, so a determined
-    // person could still guess-and-fetch codes one at a time from devtools
-    // — real enforcement needs server-side code, which this app doesn't
-    // have. See firestore.rules header above.
+
+    // Single get stays open for code verification. List is blocked.
+    // Only admin writes.
     match /playerCodes/{playerId} {
       allow get: if true;
       allow list: if false;
-      allow write: if true;
+      allow write: if isAdmin();
     }
-    // Weekly cost breakdown (receipt image + total + player count), keyed by
-    // cycle id like responses/paid. Image is stored as a compressed
-    // base64 data URL directly on the doc (no Firebase Storage) to keep
-    // this on the free Spark plan.
-    match /costs/{cycleId} {
-      allow read, write: if true;
-    }
-    // Booking status for the week (counting / booked / cancelled), keyed by
-    // cycle id like responses/paid/costs.
-    match /matchStatus/{cycleId} {
-      allow read, write: if true;
-    }
-    // Admin-entered day/date label for the header ("Who's in for
-    // <day>, <date>?"), keyed by cycle id like responses/paid/costs.
-    match /matchInfo/{cycleId} {
-      allow read, write: if true;
-    }
-    // Snapshot of the roster (id + name) taken at the moment of the most
-    // recent admin reset, so the "Last played" tab keeps showing the right
-    // names even if a player is later renamed or removed from /players.
-    match /lastPlayedRoster/{cycleId} {
-      allow read, write: if true;
-    }
-    // Tombstones for admin-deleted players so the seed roster never re-adds them.
-    match /removedPlayers/{playerId} {
-      allow read, write: if true;
-    }
-    // Per-player column-move history for the current cycle; wiped on reset.
-    match /movements/{cycleId} {
-      allow read, write: if true;
-    }
-    // Admin "are you joining?" nudges for Pending players; wiped on reset.
-    match /nudges/{cycleId} {
-      allow read, write: if true;
-    }
-    // All-time Present/Absent/Pending tally per player, set by hand by the admin.
-    match /attendanceTally/{docId} {
-      allow read, write: if true;
-    }
+
+    // Everyone reads. Only admin writes.
+    match /costs/{cycleId}            { allow read: if true; allow write: if isAdmin(); }
+    match /matchStatus/{cycleId}      { allow read: if true; allow write: if isAdmin(); }
+    match /matchInfo/{cycleId}        { allow read: if true; allow write: if isAdmin(); }
+    match /lastPlayedRoster/{cycleId} { allow read: if true; allow write: if isAdmin(); }
+    match /removedPlayers/{playerId}  { allow read: if true; allow write: if isAdmin(); }
+    match /attendanceTally/{docId}    { allow read: if true; allow write: if isAdmin(); }
   }
 }
